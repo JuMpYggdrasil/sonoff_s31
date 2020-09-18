@@ -20,4 +20,13 @@ CSE7766 (power sensor)
 ## software
 ### config
 using arduino ide 1.8 -- ESP8266  
-*To program press button before power on*
+*To program press button before power on*  
+board:generic module  
+upload speed:115200  
+cpu freq:80  
+xtal freq:26  
+flash size:4M(FS:3MB OTA:512KB)  
+flash mode:DOUT  
+flash freq 40Mhz  
+debug port:disable  
+debug lvl:none

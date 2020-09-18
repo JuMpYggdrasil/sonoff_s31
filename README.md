@@ -30,3 +30,9 @@ flash mode:DOUT
 flash freq 40Mhz  
 debug port:disable  
 debug lvl:none
+### library
+ESP8266WiFi.h  
+CSE7766.h  
+PinButton.h  
+ESP8266WebServer.h  
+ElegantOTA.h  

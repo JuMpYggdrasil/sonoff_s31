@@ -61,6 +61,7 @@ PinButton S31_Button(PUSHBUTTON_PIN);
 ESP8266WebServer server(80);
 
 //prototype declare
+void clickbutton_action();
 void PowerSensorDisplay();
 
 void setup() {
@@ -145,17 +146,8 @@ void loop()
       PowerSensorDisplay();
     }
   }
-
-  if (S31_Button.isDoubleClick()) {
-    digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
-  }
-  if (S31_Button.isSingleClick()) {
-    if (digitalRead(RELAY_PIN)) {
-      debugW("status on\n");
-    } else {
-      debugW("status off\n");
-    }
-  }
+  clickbutton_action();
+  
   myCSE7766.handle();// CSE7766 handle
   Debug.handle();// RemoteDebug handle
   S31_Button.update();
@@ -164,8 +156,20 @@ void loop()
   yield();
 }
 
-// Function example to show a new auto function name of debug* macros
-void PowerSensorDisplay() {
+void clickbutton_action(void){
+  if (S31_Button.isSingleClick()) {
+    if (digitalRead(RELAY_PIN)) {
+      debugW("status on\n");
+    } else {
+      debugW("status off\n");
+    }
+  }
+  if (S31_Button.isDoubleClick()) {
+    digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
+  }
+}
+
+void PowerSensorDisplay(void) {
   debugI("Voltage %.4f V\n", myCSE7766.getVoltage());
   debugI("Current %.4f A\n", myCSE7766.getCurrent());
   debugI("ActivePower %.4f W\n", myCSE7766.getActivePower());

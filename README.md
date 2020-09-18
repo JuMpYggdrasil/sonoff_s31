@@ -2,7 +2,7 @@
 
 ## hardware
 ### detail
-ESP8266 (controller)
+ESP8266 (controller)  
 CSE7766 (power sensor)
 ### config
 // GPIOs  
@@ -19,7 +19,5 @@ CSE7766 (power sensor)
 
 ## software
 ### config
-'''
 using arduino ide 1.8 -- ESP8266  
 *To program press button before power on*
-'''

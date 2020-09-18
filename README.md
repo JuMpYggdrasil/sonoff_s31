@@ -5,6 +5,7 @@
 ESP8266 (controller)
 CSE7766 (power sensor)
 ### config
+'''
 // GPIOs
 #define PUSHBUTTON_PIN   0
 #define RELAY_PIN       12//relay(active high) include led(active low)
@@ -15,9 +16,12 @@ CSE7766 (power sensor)
 /// i2c
 //#define SDA 4//GPIO4 as D RX
 //#define SCL 5//GPIO5 as D TX
+'''
 
 
 ## software
 ### config
+'''
 using arduino ide 1.8 -- ESP8266
 *To program press button before power on*
+'''

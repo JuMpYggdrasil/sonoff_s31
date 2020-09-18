@@ -1,5 +1,10 @@
 #define HOST_NAME "s31"
 
+#ifndef STASSID
+#define STASSID "JUMP"
+#define STAPSK  "025260652"
+#endif
+
 // Board especific libraries
 #if defined ESP8266 || defined ESP32
 
@@ -42,8 +47,8 @@
 RemoteDebug Debug;
 
 // SSID and password
-const char* ssid = "JUMP";
-const char* password = "025260652";
+const char* ssid = STASSID;
+const char* password = STAPSK;
 
 
 IPAddress local_IP(192, 168, 1, 17);
@@ -106,9 +111,10 @@ void setup() {
   ////==== OTA section ====
   server.on("/", []() {
     server.send(200, "text/plain", "Sonoff S31 using ESP8266\nTo upload \"http://<IP>/update\"");
-  });
+  });//WiFi.localIP()
   ElegantOTA.begin(&server);    // Start ElegantOTA
   server.begin();
+  MDNS.addService("http", "tcp", 80);
 
   //// Initialize RemoteDebug
   Debug.begin(HOST_NAME); // Initialize the WiFi server
@@ -152,6 +158,7 @@ void loop()
   Debug.handle();// RemoteDebug handle
   S31_Button.update();
   server.handleClient();
+  MDNS.update();
   // Give a time for ESP
   yield();
 }

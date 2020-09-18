@@ -1,4 +1,4 @@
-#define HOST_NAME "remotedebug_CSE7766_S31"
+#define HOST_NAME "s31"
 
 // Board especific libraries
 #if defined ESP8266 || defined ESP32
@@ -6,28 +6,12 @@
 // Use mDNS ? (comment this do disable it)
 #define USE_MDNS true
 
-// Arduino OTA (uncomment this to enable)
-//#define USE_ARDUINO_OTA true
-
-#else
-
-// RemoteDebug library is now only to Espressif boards,
-// as ESP32 and ESP82266,
-// If need for another WiFi boards,
-// please add an issue about this
-// and we will see if it is possible made the port for your board.
-// access: https://github.com/JoaoLopesF/RemoteDebug/issues
-
-#error "The board must be ESP8266 or ESP32"
-
-#endif // ESP
-
 //////// Libraries
 //// Hardware config
 /// GPIOs
 #define PUSHBUTTON_PIN   0
-#define RELAY_PIN       12//relay(active high) include led(active low)
-#define LED_PIN         13
+#define RELAY_PIN       12//relay(active high) include red led(active high)
+#define LED_PIN         13//blue led(active high/low???)
 /// UART0
 //#define esp8266_TX_PIN 1//connect GPIO_CSE7766_RX PIN8(RI)
 //#define esp8266_RX_PIN 3//connect GPIO_CSE7766_TX PIN6(TI)
@@ -35,28 +19,21 @@
 //#define SDA 4//GPIO4 as D RX
 //#define SCL 5//GPIO5 as D TX
 
-#if defined ESP8266
 
 // Includes of ESP8266
 #include <ESP8266WiFi.h>
 #include "CSE7766.h"
 #include <PinButton.h>
+#include <ESP8266WebServer.h>
+#include <ElegantOTA.h>
 
 #ifdef USE_MDNS
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #endif
 
-#elif defined ESP32
-
-// Includes of ESP32
-#include <WiFi.h>
-
-#ifdef USE_MDNS
-#include <DNSServer.h>
-#include "ESPmDNS.h"
-#endif
-
+#else
+#error "The board must be ESP8266 or ESP32"
 #endif // ESP
 
 // Remote debug over WiFi - not recommended for production, only for development
@@ -68,10 +45,12 @@ RemoteDebug Debug;
 const char* ssid = "JUMP";
 const char* password = "025260652";
 
+
 IPAddress local_IP(192, 168, 1, 17);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(192, 168, 1, 1);
+
 
 // Time
 uint32_t mLastTime = 0;
@@ -79,6 +58,7 @@ uint32_t mTimeSeconds = 0;
 
 CSE7766 myCSE7766;
 PinButton S31_Button(PUSHBUTTON_PIN);
+ESP8266WebServer server(80);
 
 //prototype declare
 void PowerSensorDisplay();
@@ -94,7 +74,9 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, LOW);
 
+
   WiFi.config(local_IP, primaryDNS, gateway, subnet);
+
 
   // WiFi connection
   WiFi.begin(ssid, password);
@@ -120,6 +102,13 @@ void setup() {
   MDNS.addService("telnet", "tcp", 23);
 #endif
 
+  ////==== OTA section ====
+  server.on("/", []() {
+    server.send(200, "text/plain", "Sonoff S31 using ESP8266\nTo upload \"http://<IP>/update\"");
+  });
+  ElegantOTA.begin(&server);    // Start ElegantOTA
+  server.begin();
+
   //// Initialize RemoteDebug
   Debug.begin(HOST_NAME); // Initialize the WiFi server
   Debug.setResetCmdEnabled(true); // Enable the reset command
@@ -130,6 +119,7 @@ void setup() {
   digitalWrite(RELAY_PIN, HIGH);
 
   // Debug levels
+  debugA("* This is a message of debug level ANY");//always show
   debugV("* This is a message of debug level VERBOSE");
   debugD("* This is a message of debug level DEBUG");
   debugI("* This is a message of debug level INFO");
@@ -160,16 +150,16 @@ void loop()
     digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
   }
   if (S31_Button.isSingleClick()) {
-    if(digitalRead(RELAY_PIN)){
+    if (digitalRead(RELAY_PIN)) {
       debugW("status on\n");
-    }else{
+    } else {
       debugW("status off\n");
     }
   }
   myCSE7766.handle();// CSE7766 handle
   Debug.handle();// RemoteDebug handle
   S31_Button.update();
-
+  server.handleClient();
   // Give a time for ESP
   yield();
 }
@@ -181,6 +171,6 @@ void PowerSensorDisplay() {
   debugI("ActivePower %.4f W\n", myCSE7766.getActivePower());
   debugI("ApparentPower %.4f VA\n", myCSE7766.getApparentPower());
   debugI("ReactivePower %.4f VAR\n", myCSE7766.getReactivePower());
-  debugI("PowerFactor %.4f \n", myCSE7766.getPowerFactor());
+  debugI("PowerFactor %.4f %%\n", myCSE7766.getPowerFactor());
   debugI("Energy %.4f Ws\n", myCSE7766.getEnergy());
 }

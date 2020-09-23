@@ -74,6 +74,7 @@ ESP8266WebServer server(80);
 void clickbutton_action(void);
 void PowerSensorDisplay(void);
 void redisInterface(void);
+void handleRoot(void) ;
 
 void setup() {
   // Initialize
@@ -116,11 +117,13 @@ void setup() {
 #endif
 
   ////==== OTA section ====
-  server.on("/", []() {
-    server.send(200, "text/plain", "Sonoff S31 using ESP8266\nTo upload \"http://" + WiFi.localIP().toString() + "/update\"");
-  });//WiFi.localIP().toString().c_str();
+  server.on("/", handleRoot);
+  //  server.on("/", []() {
+  //    server.send(200, "text/plain", "Sonoff S31 using ESP8266\nTo upload \"http://" + WiFi.localIP().toString() + "/update\"");
+  //  });//WiFi.localIP().toString().c_str();
   ElegantOTA.begin(&server);    // Start ElegantOTA
   server.begin();
+  MDNS.addService("telnet", "tcp", 23);
   MDNS.addService("http", "tcp", 80);
 
   //// Initialize RemoteDebug
@@ -128,7 +131,6 @@ void setup() {
   Debug.setResetCmdEnabled(true); // Enable the reset command
   Debug.showProfiler(true); // Profiler (Good to measure times, to optimize codes)
   Debug.showColors(true); // Colors
-
 
   digitalWrite(RELAY_PIN, HIGH);
 
@@ -139,6 +141,9 @@ void setup() {
   debugI("* This is a message of debug level INFO");
   debugW("* This is a message of debug level WARNING");
   debugE("* This is a message of debug level ERROR");
+
+  debugI("Connected to %s", ssid);
+  debugI("IP address: %s", WiFi.localIP().c_str());
 }
 
 void loop()
@@ -155,11 +160,12 @@ void loop()
     digitalWrite(LED_PIN, !digitalRead(LED_PIN));
 
     // Debug the time (verbose level)
-    debugV("* Time: %u seconds (VERBOSE)", mTimeSeconds);
+    //debugV("* Time: %u seconds (VERBOSE)", mTimeSeconds);
 
     if (mTimeSeconds % 5 == 0) { // Each 5 seconds
       PowerSensorDisplay();
-    } else if (mTimeSeconds % 30 == 0) {
+    }
+    if (mTimeSeconds % 30 == 0) {
       redisInterface();
     }
   }
@@ -174,61 +180,65 @@ void loop()
   yield();
 }
 
-void clickbutton_action(void) {
-  if (S31_Button.isSingleClick()) {
-    if (digitalRead(RELAY_PIN)) {
-      debugW("status on\n");
-    } else {
-      debugW("status off\n");
+void handleRoot(void) {
+  // Root web page
+  server.send(200, "text/plain", "Sonoff S31 using ESP8266\nTo upload \"http://" + WiFi.localIP().toString() + "/update\"");
+  //WiFi.localIP().toString().c_str();
+
+  void clickbutton_action(void) {
+    if (S31_Button.isSingleClick()) {
+      if (digitalRead(RELAY_PIN)) {
+        debugW("status on\n");
+      } else {
+        debugW("status off\n");
+      }
+    }
+    if (S31_Button.isDoubleClick()) {
+      digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
     }
   }
-  if (S31_Button.isDoubleClick()) {
-    digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
-  }
-}
 
-void PowerSensorDisplay(void) {
-  debugI("Voltage %.4f V\n", myCSE7766.getVoltage());
-  debugI("Current %.4f A\n", myCSE7766.getCurrent());
-  debugI("ActivePower %.4f W\n", myCSE7766.getActivePower());
-  debugI("ApparentPower %.4f VA\n", myCSE7766.getApparentPower());
-  debugI("ReactivePower %.4f VAR\n", myCSE7766.getReactivePower());
-  debugI("PowerFactor %.4f %%\n", myCSE7766.getPowerFactor());
-  debugI("Energy %.4f Ws\n", myCSE7766.getEnergy());
-}
-
-void redisInterface(void) {
-  WiFiClient redisConn;
-  if (!redisConn.connect(REDIS_ADDR, REDIS_PORT))
-  {
-    debugD("Failed to connect to the Redis server!");
-    return;
+  void PowerSensorDisplay(void) {
+    debugV("Voltage %.4f V\n", myCSE7766.getVoltage());
+    debugV("Current %.4f A\n", myCSE7766.getCurrent());
+    debugV("ActivePower %.4f W\n", myCSE7766.getActivePower());
+    debugV("ApparentPower %.4f VA\n", myCSE7766.getApparentPower());
+    debugV("ReactivePower %.4f VAR\n", myCSE7766.getReactivePower());
+    debugV("PowerFactor %.4f %%\n", myCSE7766.getPowerFactor());
+    debugV("Energy %.4f Ws\n", myCSE7766.getEnergy());
   }
 
-  Redis redis(redisConn);
-  auto connRet = redis.authenticate(REDIS_PASSWORD);
-  if (connRet == RedisSuccess)
-  {
-    debugD("Connected to the Redis server!");
-  }
-  else
-  {
-    debugD("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
-    return;
-  }
+  void redisInterface(void) {
+    WiFiClient redisConn;
+    if (!redisConn.connect(REDIS_ADDR, REDIS_PORT))
+    {
+      debugD("Failed to connect to the Redis server!");
+      return;
+    }
 
-  //    Serial.print("SET foo bar: ");
-  //    if (redis.set("foo", "bar"))
-  //    {
-  //        Serial.println("ok!");
-  //    }
-  //    else
-  //    {
-  //        Serial.println("err!");
-  //    }
-  String redis_result = redis.get("foo");
-  debugD("GET foo: %s", redis_result.c_str());
+    Redis redis(redisConn);
+    auto connRet = redis.authenticate(REDIS_PASSWORD);
+    if (connRet == RedisSuccess)
+    {
+      debugD("Connected to the Redis server!");
+    }
+    else
+    {
+      debugD("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
+      return;
+    }
 
-  redisConn.stop();
-  debugD("Connection closed!");
-}
+    debugD("SET foo bar: ");
+    bool redis_bool_result = redis.set("foo", "bar");
+    if (redis_bool_result) {
+      debugD("ok!");
+    } else {
+      debugD("err!");
+    }
+
+    String redis_str_result = redis.get("foo");
+    debugD("GET foo: %s", redis_str_result.c_str());
+
+    redisConn.stop();
+    debugD("Connection closed!");
+  }

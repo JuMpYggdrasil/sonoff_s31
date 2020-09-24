@@ -8,6 +8,9 @@
 #define REDIS_ADDR      "siriprapawat.trueddns.com"//"192.168.1.22"
 #define REDIS_PORT      14285//6379
 #define REDIS_PASSWORD  "61850"
+#define REDIS_DEVKEY    "AY4_9_CONV_621MxAY4x500xTTK_LINE2xMx/MMXU1$MX$TotW$mag$f"
+#define REDIS_EEPROM_ADDRBEGIN  0
+#define REDIS_EEPROM_ADDRLEN  100
 
 // Board especific libraries
 #if defined ESP8266 || defined ESP32
@@ -36,6 +39,7 @@
 #include <ESP8266WebServer.h>
 #include <Redis.h>
 #include <ElegantOTA.h>
+#include <EEPROM.h>
 
 #ifdef USE_MDNS
 #include <DNSServer.h>
@@ -54,6 +58,12 @@ RemoteDebug Debug;
 // SSID and password
 const char* ssid = STASSID;
 const char* password = STAPSK;
+
+// WWW user and password
+const char* www_username = "admin";
+const char* www_password = "admin";
+
+const char* redis_deviceKey = REDIS_DEVKEY;
 
 #if !USE_MDNS
 IPAddress local_IP(192, 168, 1, 17);
@@ -76,8 +86,8 @@ void PowerSensorDisplay(void);
 void redisInterface(void);
 
 void handleRoot();
-void handleLogin();
 void handleNotFound();
+void handleConfig();
 
 void setup() {
   // Initialize
@@ -121,11 +131,8 @@ void setup() {
 
   ////==== OTA section ====
   server.on("/", HTTP_GET, handleRoot);
-  //  server.on("/", []() {
-  //    server.send(200, "text/plain", "Sonoff S31 using ESP8266\nTo upload \"http://" + WiFi.localIP().toString() + "/update\"");
-  //  });//WiFi.localIP().toString().c_str();
-  server.on("/login", HTTP_POST, handleLogin);
   server.onNotFound(handleNotFound);
+  server.on("/config", HTTP_POST, handleConfig);
 
   ElegantOTA.begin(&server);    // Start ElegantOTA
   server.begin();
@@ -148,8 +155,16 @@ void setup() {
   debugW("* This is a message of debug level WARNING");
   debugE("* This is a message of debug level ERROR");
 
+  EEPROM.begin(512);
+//  int len = EEPROM_write(address, "DSDI|123456789");
+//  NodeSerial.println(EEPROM_read(address, len));
+
   debugI("Connected to %s", ssid);
-  debugI("IP address: %s", WiFi.localIP().c_str());
+  debugI("IP address: %s", WiFi.localIP().toString().c_str());
+
+
+  redis_deviceKey = EEPROM_read(REDIS_EEPROM_ADDRBEGIN,REDIS_EEPROM_ADDRLEN).c_str();
+  debugI("redis_deviceKey: %s",redis_deviceKey);
 }
 
 void loop()
@@ -187,24 +202,58 @@ void loop()
 }
 
 void handleRoot(void) {
-  // Root web page
-  server.send(200, "text/plain", "Sonoff S31 using ESP8266\nTo upload \"http://" + WiFi.localIP().toString() + "/update\"");
-  //WiFi.localIP().toString().c_str();
-}
-void handleLogin() {// If a POST request is made to URI /login
-  if ( ! server.hasArg("username") || ! server.hasArg("password")|| server.arg("username") == NULL || server.arg("password") == NULL) { // If the POST request doesn't have username and password data
-    server.send(400, "text/plain", "400: Invalid Request");// The request is invalid, so send HTTP status 400
-    return;
-  }
-  if (server.arg("username") == "John Doe" && server.arg("password") == "password123") { // If both the username and the password are correct
-    server.send(200, "text/html", "<h1>Welcome, " + server.arg("username") + "!</h1><p>Login successful</p>");
-  } else {                                                                              // Username and password don't match
-    server.send(401, "text/plain", "401: Unauthorized");
-  }
-}
+  String rootPage = "<html><div>Sonoff S31 using ESP8266</div></br>\n";
+  rootPage += "<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div>";
+  rootPage += "<form action=\"/config\" method=\"POST\">\n";
+  rootPage += "<input type=\"text\" name=\"name1\" placeholder=\"1\"></br>\n";
+  rootPage += "<input type=\"text\" name=\"name2\" placeholder=\"2\"></br>\n";
+  rootPage += "<input type=\"text\" name=\"name3\" placeholder=\"3\"></br>\n";
+  rootPage += "<input type=\"submit\">\n";
+  rootPage += "</form></html>";
 
+  //authentication
+  if (!server.authenticate(www_username, www_password)) {
+    return server.requestAuthentication();
+  }
+  // Root web page
+  server.send(200, "text/html", rootPage);
+}
 void handleNotFound() {
   server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
+}
+void handleConfig(void) {
+  //save data to eeprom
+  //result.something = save(eeprom_addr,server.arg("name1"));
+  for (int i = REDIS_EEPROM_ADDRBEGIN; i < (REDIS_EEPROM_ADDRBEGIN + REDIS_EEPROM_ADDRLEN-1); i++) { //clear EEPROM this section
+    EEPROM.write(i, 0);
+  }
+  EEPROM_write(REDIS_EEPROM_ADDRBEGIN, server.arg("name1"));
+  //if result.something config ok
+  server.send(200, "text/plain", "config ok");
+  //or not
+  //server.send(200, "text/plain", "config error");
+}
+
+String EEPROM_read(int index, int length) {
+  String text = "";
+  char ch = 1;
+
+  for (int i = index; (i < (index + length)) && ch; ++i) {
+    if (ch = EEPROM.read(i)) {
+      text.concat(ch);
+    }
+  }
+  return text;
+}
+
+int EEPROM_write(int index, String text) {
+  for (int i = index; i < text.length() + index; ++i) {
+    EEPROM.write(i, text[i - index]);
+  }
+  EEPROM.write(index + text.length(), 0);
+  EEPROM.commit();
+
+  return text.length() + 1;
 }
 
 void clickbutton_action(void) {
@@ -251,14 +300,14 @@ void redisInterface(void) {
   }
 
   debugD("SET foo bar: ");
-  bool redis_bool_result = redis.set("foo", "bar");
+  bool redis_bool_result = redis.set(redis_deviceKey, "345.6");
   if (redis_bool_result) {
     debugD("ok!");
   } else {
     debugD("err!");
   }
 
-  String redis_str_result = redis.get("foo");
+  String redis_str_result = redis.get(redis_deviceKey);
   debugD("GET foo: %s", redis_str_result.c_str());
 
   redisConn.stop();

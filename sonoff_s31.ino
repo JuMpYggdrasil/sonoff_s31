@@ -9,14 +9,47 @@
 #define REDIS_PORT      14285//6379
 #define REDIS_PASSWORD  "61850"
 #define REDIS_DEVKEY    "AY4_9_CONV_621MxAY4x500xTTK_LINE2xMx/MMXU1$MX$TotW$mag$f"
-#define REDIS_EEPROM_ADDRBEGIN  0
-#define REDIS_EEPROM_ADDRLEN  100
+
+#define REDIS_EEPROM_ADDR_BEGIN  0
+#define REDIS_EEPROM_ADDR_VOLTAGE  100
+#define REDIS_EEPROM_ADDR_CURRENT  150
+#define REDIS_EEPROM_ADDR_ACTIVEPOWER  200
+#define REDIS_EEPROM_ADDR_APPARENTPOWER  250
+#define REDIS_EEPROM_ADDR_REACTIVEPOWER  300
+#define REDIS_EEPROM_ADDR_POWERFACTOR  350
+#define REDIS_EEPROM_ADDR_ENERGY  400
+#define REDIS_EEPROM_ADDR_TIMESTAMP  450
+
+#define REDIS_DEVKEY
+#define REDIS_VOLTAGE
+#define REDIS_CURRENT
+#define REDIS_ACTIVEPOWER
+#define REDIS_APPARENTPOWER
+#define REDIS_REACTIVEPOWER
+#define REDIS_POWERFACTOR
+#define REDIS_ENERGY
+#define REDIS_TIMESTAMP
+
+/* 
+EEPROM structure to store key of value
+addr
+000-099(100) key/name
+100-149 (50) Voltage 
+150-199 (50) Current
+200-249 (50) ActivePower
+250-299 (50) ApparentPower
+300-349 (50) ReactivePower
+350-399 (50) PowerFactor
+400-449 (50) Energy
+450-499 (50) TimeStamp
+500-511 (12) 
+*/
 
 // Board especific libraries
 #if defined ESP8266 || defined ESP32
 
 // Use mDNS ? (comment this do disable it)
-#define USE_MDNS true
+#define USE_MDNS false
 
 //////// Libraries
 //// Hardware config
@@ -63,7 +96,16 @@ const char* password = STAPSK;
 const char* www_username = "admin";
 const char* www_password = "admin";
 
-const char* redis_deviceKey = REDIS_DEVKEY;
+
+char* redis_deviceKey = REDIS_DEVKEY;
+char* redis_voltage = REDIS_VOLTAGE;
+char* redis_current = REDIS_CURRENT;
+char* redis_activepower = REDIS_ACTIVEPOWER;
+char* redis_apparentpower = REDIS_APPARENTPOWER;
+char* redis_reactivepower = REDIS_REACTIVEPOWER;
+char* redis_powerfactor = REDIS_POWERFACTOR;
+char* redis_energy = REDIS_ENERGY;
+char* redis_timestamp = REDIS_TIMESTAMP;
 
 #if !USE_MDNS
 IPAddress local_IP(192, 168, 1, 17);
@@ -88,6 +130,9 @@ void redisInterface(void);
 void handleRoot();
 void handleNotFound();
 void handleConfig();
+
+void EEPROM_WriteString(char add, String data);
+String EEPROM_ReadString(char add);
 
 void setup() {
   // Initialize
@@ -156,15 +201,14 @@ void setup() {
   debugE("* This is a message of debug level ERROR");
 
   EEPROM.begin(512);
-//  int len = EEPROM_write(address, "DSDI|123456789");
-//  NodeSerial.println(EEPROM_read(address, len));
+  //  int len = EEPROM_write(address, "DSDI|123456789");
+  //  NodeSerial.println(EEPROM_read(address, len));
 
   debugI("Connected to %s", ssid);
   debugI("IP address: %s", WiFi.localIP().toString().c_str());
 
-
-  redis_deviceKey = EEPROM_read(REDIS_EEPROM_ADDRBEGIN,REDIS_EEPROM_ADDRLEN).c_str();
-  debugI("redis_deviceKey: %s",redis_deviceKey);
+  redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN).c_str();
+  debugI("redis_deviceKey: %s", redis_deviceKey);
 }
 
 void loop()
@@ -202,19 +246,31 @@ void loop()
 }
 
 void handleRoot(void) {
-  String rootPage = "<html><div>Sonoff S31 using ESP8266</div></br>\n";
+  String rootPage = "<html><div>Sonoff S31 using ESP8266</div></br>";
   rootPage += "<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div>";
-  rootPage += "<form action=\"/config\" method=\"POST\">\n";
-  rootPage += "<input type=\"text\" name=\"name1\" placeholder=\"1\"></br>\n";
-  rootPage += "<input type=\"text\" name=\"name2\" placeholder=\"2\"></br>\n";
-  rootPage += "<input type=\"text\" name=\"name3\" placeholder=\"3\"></br>\n";
-  rootPage += "<input type=\"submit\">\n";
+  rootPage += "<form action=\"/config\" method=\"POST\">";
+  rootPage += "<label for=\"name1\">Device key:</label>";
+  rootPage += "<input type=\"text\" name=\"name1\" placeholder=\"" + String(redis_deviceKey) + "\"></br>";
+  rootPage += "<label for=\"name2\">Device key:</label>";
+  rootPage += "<input type=\"text\" name=\"name2\" placeholder=\"2\"></br>";
+  rootPage += "<label for=\"name3\">Device key:</label>";
+  rootPage += "<input type=\"text\" name=\"name3\" placeholder=\"3\"></br>";
+  rootPage += "<label for=\"name4\">Device key:</label>";
+  rootPage += "<input type=\"text\" name=\"name4\" placeholder=\"4\"></br>";
+  rootPage += "<label for=\"name5\">Device key:</label>";
+  rootPage += "<input type=\"text\" name=\"name5\" placeholder=\"5\"></br>";
+  rootPage += "<label for=\"name6\">Device key:</label>";
+  rootPage += "<input type=\"text\" name=\"name6\" placeholder=\"6\"></br>";
+  rootPage += "<label for=\"name7\">Device key:</label>";
+  rootPage += "<input type=\"text\" name=\"name7\" placeholder=\"7\"></br>";
+  rootPage += "<input type=\"submit\">";
   rootPage += "</form></html>";
 
   //authentication
   if (!server.authenticate(www_username, www_password)) {
     return server.requestAuthentication();
   }
+  redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN).c_str();
   // Root web page
   server.send(200, "text/html", rootPage);
 }
@@ -224,38 +280,41 @@ void handleNotFound() {
 void handleConfig(void) {
   //save data to eeprom
   //result.something = save(eeprom_addr,server.arg("name1"));
-  for (int i = REDIS_EEPROM_ADDRBEGIN; i < (REDIS_EEPROM_ADDRBEGIN + REDIS_EEPROM_ADDRLEN-1); i++) { //clear EEPROM this section
-    EEPROM.write(i, 0);
-  }
-  EEPROM_write(REDIS_EEPROM_ADDRBEGIN, server.arg("name1"));
+  //may be EEPROM clear section
+  EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, server.arg("name1"));
   //if result.something config ok
   server.send(200, "text/plain", "config ok");
   //or not
   //server.send(200, "text/plain", "config error");
 }
 
-String EEPROM_read(int index, int length) {
-  String text = "";
-  char ch = 1;
-
-  for (int i = index; (i < (index + length)) && ch; ++i) {
-    if (ch = EEPROM.read(i)) {
-      text.concat(ch);
-    }
+void EEPROM_WriteString(char add, String data)
+{
+  int _size = data.length();
+  int i;
+  for (i = 0; i < _size; i++)
+  {
+    EEPROM.write(add + i, data[i]);
   }
-  return text;
-}
-
-int EEPROM_write(int index, String text) {
-  for (int i = index; i < text.length() + index; ++i) {
-    EEPROM.write(i, text[i - index]);
-  }
-  EEPROM.write(index + text.length(), 0);
+  EEPROM.write(add + _size, '\0'); //Add termination null character for String Data
   EEPROM.commit();
-
-  return text.length() + 1;
 }
-
+String EEPROM_ReadString(char add)
+{
+  int i;
+  char data[100]; //Max 100 Bytes
+  int len = 0;
+  unsigned char k;
+  k = EEPROM.read(add);
+  while (k != '\0' && len < 200) //Read until null character
+  {
+    k = EEPROM.read(add + len);
+    data[len] = k;
+    len++;
+  }
+  data[len] = '\0';
+  return String(data);
+}
 void clickbutton_action(void) {
   if (S31_Button.isSingleClick()) {
     if (digitalRead(RELAY_PIN)) {
@@ -268,7 +327,6 @@ void clickbutton_action(void) {
     digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
   }
 }
-
 void PowerSensorDisplay(void) {
   debugV("Voltage %.4f V\n", myCSE7766.getVoltage());
   debugV("Current %.4f A\n", myCSE7766.getCurrent());
@@ -299,7 +357,7 @@ void redisInterface(void) {
     return;
   }
 
-  debugD("SET foo bar: ");
+  debugD("SET %s xxx: ", redis_deviceKey);
   bool redis_bool_result = redis.set(redis_deviceKey, "345.6");
   if (redis_bool_result) {
     debugD("ok!");

@@ -88,10 +88,6 @@
 // Remote debug over WiFi - not recommended for production, only for development
 #include "RemoteDebug.h"        //https://github.com/JoaoLopesF/RemoteDebug
 
-RemoteDebug Debug;
-
-RedisReturnValue retx;
-
 // SSID and password
 const char* ssid = STASSID;
 const char* password = STAPSK;
@@ -134,6 +130,8 @@ WiFiClient redisConn;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
+
+RemoteDebug Debug;
 
 //prototype declare
 void clickbutton_action(void);
@@ -233,8 +231,6 @@ void setup() {
 
 void loop()
 {
-  //WiFiClient redisConn;
-
   // Each second
   if ((millis() - mLastTime) >= 1000) {
     // Time
@@ -277,12 +273,12 @@ void handleRoot(void) {
 
   redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
 
-  rootPage = "<html><div class=\"container\" style=\"width:80%;\">";
+  rootPage = "<html><div class=\"container\">";
   rootPage += "<div>Sonoff S31 using ESP8266</div>";
   rootPage += "<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>";
   rootPage += "<form action=\"/config\" method=\"POST\">";
   rootPage += "<label for=\"name1\">Device key:</label>";
-  rootPage += "<input type=\"text\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"></br>";
+  rootPage += "<input type=\"text\" style=\"width:60%\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"></br>";
   rootPage += "<input type=\"submit\">";
   rootPage += "</form></div></html>";
   // Root web page
@@ -368,6 +364,7 @@ void redisInterface_handle(void) {
       if (!redisConn.connect(REDIS_ADDR, REDIS_PORT))
       {
         debugE("Failed to connect to the Redis server!");
+        redisInterface_state = 0;
         redisInterface_flag = false;
         return;
       }
@@ -378,9 +375,9 @@ void redisInterface_handle(void) {
       if (connRet == RedisSuccess)
       {
         debugD("Connected to the Redis server!");
-        redisInterface_state++;
       } else {
         debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
+        redisInterface_state = 0;
         redisInterface_flag = false;
         return;
       }
@@ -393,7 +390,7 @@ void redisInterface_handle(void) {
       if (redis_bool_result) {
         debugD("ok!");
       } else {
-        debugE("err!");
+        debugE("err");
       }
 
       redis_str_result = redis.get(redis_key.c_str());
@@ -407,7 +404,91 @@ void redisInterface_handle(void) {
       if (redis_bool_result) {
         debugD("ok!");
       } else {
-        debugE("err!");
+        debugE("err");
+      }
+
+      redis_str_result = redis.get(redis_key.c_str());
+      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+
+      // ActivePower
+      redis_key = redis_deviceKey + String(redis_activepower);
+      cse7766_value = String(myCSE7766.getActivePower());
+      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+      if (redis_bool_result) {
+        debugD("ok!");
+      } else {
+        debugE("err");
+      }
+
+      redis_str_result = redis.get(redis_key.c_str());
+      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+
+      // ApparentPower
+      redis_key = redis_deviceKey + String(redis_apparentpower);
+      cse7766_value = String(myCSE7766.getApparentPower());
+      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+      if (redis_bool_result) {
+        debugD("ok!");
+      } else {
+        debugE("err");
+      }
+
+      redis_str_result = redis.get(redis_key.c_str());
+      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+
+      redisInterface_state++;
+    } else if (redisInterface_state == 2) {
+      Redis redis(redisConn);
+      auto connRet = redis.authenticate(REDIS_PASSWORD);//RedisReturnValue connRet
+      if (connRet == RedisSuccess)
+      {
+        debugD("Connected to the Redis server!");
+      } else {
+        debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
+        redisInterface_state = 0;
+        redisInterface_flag = false;
+        return;
+      }
+
+      // ReactivePower
+      redis_key = redis_deviceKey + String(redis_reactivepower);
+      cse7766_value = String(myCSE7766.getReactivePower());
+      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+      if (redis_bool_result) {
+        debugD("ok!");
+      } else {
+        debugE("err");
+      }
+
+      redis_str_result = redis.get(redis_key.c_str());
+      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+
+      // PowerFactor
+      redis_key = redis_deviceKey + String(redis_powerfactor);
+      cse7766_value = String(myCSE7766.getPowerFactor());
+      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+      if (redis_bool_result) {
+        debugD("ok!");
+      } else {
+        debugE("err");
+      }
+
+      redis_str_result = redis.get(redis_key.c_str());
+      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+
+      // Energy
+      redis_key = redis_deviceKey + String(redis_energy);
+      cse7766_value = String(myCSE7766.getEnergy());
+      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+      if (redis_bool_result) {
+        debugD("ok!");
+      } else {
+        debugE("err");
       }
 
       redis_str_result = redis.get(redis_key.c_str());
@@ -421,14 +502,14 @@ void redisInterface_handle(void) {
       if (redis_bool_result) {
         debugD("ok!");
       } else {
-        debugE("err!");
+        debugE("err");
       }
 
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
 
       redisInterface_state++;
-    } else if (redisInterface_state == 2) {
+    } else if (redisInterface_state == 3) {
       redisConn.stop();
       debugD("Connection closed!");
 

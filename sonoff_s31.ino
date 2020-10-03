@@ -288,10 +288,6 @@ void handleNotFound() {
   server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
 }
 void handleConfig(void) {
-  //authentication
-  if (!server.authenticate(www_username, www_password)) {
-    return server.requestAuthentication();
-  }
   if (server.hasArg("name1")) {
     EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, server.arg("name1"));
     server.send(200, "text/plain", "config ok");

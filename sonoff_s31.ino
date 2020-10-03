@@ -10,14 +10,9 @@
 #define REDIS_PASSWORD  "61850"
 
 #define REDIS_EEPROM_ADDR_BEGIN  0
-#define REDIS_EEPROM_ADDR_VOLTAGE  100
-#define REDIS_EEPROM_ADDR_CURRENT  120
-#define REDIS_EEPROM_ADDR_ACTIVEPOWER  140
-#define REDIS_EEPROM_ADDR_APPARENTPOWER  160
-#define REDIS_EEPROM_ADDR_REACTIVEPOWER  180
-#define REDIS_EEPROM_ADDR_POWERFACTOR  200
-#define REDIS_EEPROM_ADDR_ENERGY  220
-#define REDIS_EEPROM_ADDR_TIMESTAMP  240
+#define REDIS_EEPROM_SERVER_ADDR  100
+#define REDIS_EEPROM_SERVER_PORT  130
+
 
 #define REDIS_DEVKEY "AY4_9_CONV_621MxAY4x500xTTK_LINE2xMx/MMXU1$MX$"//TotW$mag$f
 #define REDIS_VOLTAGE "Volt$mag$f"
@@ -28,22 +23,6 @@
 #define REDIS_POWERFACTOR "Pf$mag$f"
 #define REDIS_ENERGY "E$mag$f"
 #define REDIS_TIMESTAMP "Time$mag$f"
-
-/*
-  EEPROM structure to store key of value
-  addr
-  000-099(100) key/name
-  100-119 (20) Voltage
-  120-139 (20) Current
-  140-159 (20) ActivePower
-  160-179 (20) ApparentPower
-  180-199 (20) ReactivePower
-  200-219 (20) PowerFactor
-  220-239 (20) Energy
-  240-259 (20) TimeStamp
-  260-279 (20)
-  280-511 (230)
-*/
 
 // Board especific libraries
 #if defined ESP8266 || defined ESP32
@@ -75,6 +54,7 @@
 #include <EEPROM.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <singleLEDLibrary.h>
 
 #ifdef USE_MDNS
 #include <DNSServer.h>
@@ -98,6 +78,8 @@ const char* www_password = "admin";
 
 
 String redis_deviceKey = REDIS_DEVKEY;
+String redis_server_addr = REDIS_ADDR;
+uint16_t redis_server_port = REDIS_PORT;
 const char* redis_voltage = REDIS_VOLTAGE;
 const char* redis_current = REDIS_CURRENT;
 const char* redis_activepower = REDIS_ACTIVEPOWER;
@@ -131,7 +113,15 @@ WiFiClient redisConn;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
 
+sllib blue_led(LED_PIN);
 RemoteDebug Debug;
+
+int normal_pattern[] = {900, 100};
+int two_pattern[] = {1500, 100, 300, 100};
+int three_pattern[] = {1100, 100, 300, 100, 300, 100};
+//const int error_pattern[] = {300,100, 300, 300};
+//const int special_pattern[] = {300,100, 300, 100, 300, 900};
+//int wifi_pattern[] = {500,1500};
 
 //prototype declare
 void clickbutton_action(void);
@@ -144,6 +134,8 @@ void handleConfig();
 
 void EEPROM_WriteString(char addr, String data);
 String EEPROM_ReadString(char addr);
+void EEPROM_WriteUInt(char address, unsigned int number);
+unsigned int EEPROM_ReadUInt(char address);
 
 void setup() {
   // Initialize
@@ -151,12 +143,14 @@ void setup() {
   myCSE7766.begin(); // will initialize serial to 4800 bps
 
   //pinMode(PUSHBUTTON_PIN, INPUT);
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  //  pinMode(LED_PIN, OUTPUT);
+  //  digitalWrite(LED_PIN, LOW);
+  blue_led.setOffSingle();//turn on led
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, LOW);
 
   redis_deviceKey.reserve(80);
+  redis_server_addr.reserve(30);
 
 #if !USE_MDNS
   WiFi.config(local_IP, primaryDNS, gateway, subnet);
@@ -169,6 +163,7 @@ void setup() {
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
+    yield();
   }
 
   // Register host name in WiFi and mDNS
@@ -185,6 +180,7 @@ void setup() {
     //Serial.println(HOST_NAME);
   }
   MDNS.addService("telnet", "tcp", 23);
+  MDNS.addService("http", "tcp", 80);
 #endif
 
   ////==== OTA section ====
@@ -194,8 +190,7 @@ void setup() {
 
   ElegantOTA.begin(&server);    // Start ElegantOTA
   server.begin();
-  MDNS.addService("telnet", "tcp", 23);
-  MDNS.addService("http", "tcp", 80);
+  
 
   //// Initialize RemoteDebug
   Debug.begin(HOST_NAME); // Initialize the WiFi server
@@ -217,8 +212,8 @@ void setup() {
 
   EEPROM.begin(512);
 
-  debugI("Connected to %s", ssid);
-  debugI("IP address: %s", WiFi.localIP().toString().c_str());
+//  debugI("Connected to %s", ssid);
+//  debugI("IP address: %s", WiFi.localIP().toString().c_str());
 
   if (EEPROM.read(REDIS_EEPROM_ADDR_BEGIN) == 0) {
     EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, redis_deviceKey);
@@ -226,7 +221,23 @@ void setup() {
     redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
   }
 
-  debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
+//  if (EEPROM.read(REDIS_EEPROM_SERVER_ADDR) == 0) {
+//    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, redis_server_addr);
+//  } else {
+//    redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+//  }
+//
+//  if (EEPROM.read(REDIS_EEPROM_SERVER_PORT) == 0) {
+//    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, redis_server_port);
+//  } else {
+//    redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+//  }
+
+//  debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
+//  debugI("redis_server_addr: %s", redis_server_addr.c_str());
+//  debugI("redis_server_port: %d", redis_server_port);
+
+  blue_led.setPatternSingle(normal_pattern, 2);
 }
 
 void loop()
@@ -236,12 +247,6 @@ void loop()
     // Time
     mLastTime = millis();
     mTimeSeconds++;
-
-    // Blink the led
-    digitalWrite(LED_PIN, !digitalRead(LED_PIN));
-
-    // Debug the time (verbose level)
-    //debugV("* Time: %u seconds (VERBOSE)", mTimeSeconds);
 
     if (mTimeSeconds % 5 == 0) { // Each 5 seconds
       PowerSensorDisplay();
@@ -255,6 +260,7 @@ void loop()
   myCSE7766.handle();// CSE7766 handle
   Debug.handle();// RemoteDebug handle
   S31_Button.update();
+  blue_led.update();
   server.handleClient();
   MDNS.update();
   timeClient.update();
@@ -272,15 +278,20 @@ void handleRoot(void) {
   }
 
   redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
+  //redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+  //redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
 
   rootPage = "<html><div class=\"container\">";
-  rootPage += "<div>Sonoff S31 using ESP8266</div>";
   rootPage += "<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>";
-  rootPage += "<form action=\"/config\" method=\"POST\">";
-  rootPage += "<label for=\"name1\">Device key:</label>";
-  rootPage += "<input type=\"text\" style=\"width:60%\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"></br>";
-  rootPage += "<input type=\"submit\">";
-  rootPage += "</form></div></html>";
+  rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
+  rootPage.concat(F("<label for=\"name1\">Device key:</label>"));
+  rootPage.concat("<input type=\"text\" style=\"width:60%\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"></br>");
+//  rootPage.concat(F("<label for=\"name2\">Redis addr:</label>"));
+//  rootPage.concat("<input type=\"text\" style=\"width:60%\" name=\"name2\" placeholder=\"" + redis_server_addr + "\">");
+//  rootPage.concat(F("<label for=\"name3\">Redis port:</label>"));
+//  rootPage.concat(F("<input type=\"text\" style=\"width:60%\" name=\"name3\" placeholder=\"default 6379\">"));
+  rootPage.concat(F("<input type=\"submit\">"));
+  rootPage.concat(F("</form></div></html>"));
   // Root web page
   server.send(200, "text/html", rootPage);
 }
@@ -288,8 +299,10 @@ void handleNotFound() {
   server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
 }
 void handleConfig(void) {
-  if (server.hasArg("name1")) {
+  if ((server.hasArg("name1")) || (server.hasArg("name2")) || (server.hasArg("name3"))) {
     EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, server.arg("name1"));
+//    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, server.arg("name2"));
+//    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, server.arg("name3").toInt());
     server.send(200, "text/plain", "config ok");
     debugD("config ok");
   } else {
@@ -325,6 +338,16 @@ String EEPROM_ReadString(char addr)
   data[len] = '\0';
   return String(data);
 }
+void EEPROM_WriteUInt(char address, unsigned int number)
+{
+  EEPROM.write(address, number >> 8);
+  EEPROM.write(address + 1, number & 0xFF);
+}
+unsigned int EEPROM_ReadUInt(char address)
+{
+  return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
+}
+
 void clickbutton_action(void) {
   if (S31_Button.isSingleClick()) {
     if (digitalRead(RELAY_PIN)) {
@@ -334,6 +357,7 @@ void clickbutton_action(void) {
     }
 
     debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
+    blue_led.setPatternSingle(normal_pattern, 2);
   }
   if (S31_Button.isDoubleClick()) {
     digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
@@ -357,7 +381,7 @@ void redisInterface_handle(void) {
 
   if (redisInterface_flag == true) {
     if (redisInterface_state == 0) {
-      if (!redisConn.connect(REDIS_ADDR, REDIS_PORT))
+      if (!redisConn.connect(redis_server_addr.c_str(), redis_server_port))
       {
         debugE("Failed to connect to the Redis server!");
         redisInterface_state = 0;
@@ -371,11 +395,13 @@ void redisInterface_handle(void) {
       if (connRet == RedisSuccess)
       {
         debugD("Connected to the Redis server!");
+        blue_led.setPatternSingle(two_pattern, 4);
       } else {
         debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
         redisInterface_state = 0;
         redisInterface_flag = false;
         redisConn.stop();
+        blue_led.setPatternSingle(three_pattern, 6);
         return;
       }
 

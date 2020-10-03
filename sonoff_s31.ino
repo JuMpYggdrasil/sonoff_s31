@@ -379,6 +379,7 @@ void redisInterface_handle(void) {
         debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
         redisInterface_state = 0;
         redisInterface_flag = false;
+        redisConn.stop();
         return;
       }
 
@@ -449,6 +450,7 @@ void redisInterface_handle(void) {
         debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
         redisInterface_state = 0;
         redisInterface_flag = false;
+        redisConn.stop();
         return;
       }
 

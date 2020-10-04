@@ -5,13 +5,15 @@
 #define STAPSK  "025260652"
 #endif
 
-#define REDIS_ADDR      "siriprapawat.trueddns.com"//"192.168.1.22"
-#define REDIS_PORT      14285//6379
-#define REDIS_PASSWORD  "61850"
+#define REDIS_ADDR "siriprapawat.trueddns.com"//"192.168.1.22"
+#define REDIS_PORT 14285//6379
+#define REDIS_PASS "61850"
 
-#define REDIS_EEPROM_ADDR_BEGIN  0
-#define REDIS_EEPROM_SERVER_ADDR  100
-#define REDIS_EEPROM_SERVER_PORT  130
+#define REDIS_EEPROM_ADDR_BEGIN 0//address of REDIS_DEVKEY
+#define REDIS_EEPROM_SERVER_ADDR 100
+#define REDIS_EEPROM_SERVER_PORT 130
+#define REDIS_EEPROM_SERVER_PASS 132
+//#define REDIS_EEPROM_SERVER_xx 140
 
 
 #define REDIS_DEVKEY "AY4_9_CONV_621MxAY4x500xTTK_LINE2xMx/MMXU1$MX$"//TotW$mag$f
@@ -49,12 +51,14 @@
 #include "CSE7766.h"
 #include <PinButton.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266FtpServer.h>
 #include <Redis.h>
 #include <ElegantOTA.h>
 #include <EEPROM.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <singleLEDLibrary.h>
+#include <FS.h>
 
 #ifdef USE_MDNS
 #include <DNSServer.h>
@@ -69,17 +73,21 @@
 #include "RemoteDebug.h"        //https://github.com/JoaoLopesF/RemoteDebug
 
 // SSID and password
-const char* ssid = STASSID;
-const char* password = STAPSK;
+char* ssid = STASSID;
+char* password = STAPSK;
 
 // WWW user and password
 const char* www_username = "admin";
 const char* www_password = "admin";
 
+// FTP
+const char* ftp_user = "admin";
+const char* ftp_password = "admin";
 
 String redis_deviceKey = REDIS_DEVKEY;
 String redis_server_addr = REDIS_ADDR;
 uint16_t redis_server_port = REDIS_PORT;
+String redis_server_pass = REDIS_PASS;
 const char* redis_voltage = REDIS_VOLTAGE;
 const char* redis_current = REDIS_CURRENT;
 const char* redis_activepower = REDIS_ACTIVEPOWER;
@@ -107,7 +115,7 @@ int redisInterface_state = 0;
 CSE7766 myCSE7766;
 PinButton S31_Button(PUSHBUTTON_PIN);
 ESP8266WebServer server(80);
-
+FtpServer ftpSrv;
 WiFiClient redisConn;
 
 WiFiUDP ntpUDP;
@@ -116,11 +124,10 @@ NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
 sllib blue_led(LED_PIN);
 RemoteDebug Debug;
 
-int normal_pattern[] = {900, 100};
-int two_pattern[] = {1500, 100, 300, 100};
-int three_pattern[] = {1100, 100, 300, 100, 300, 100};
-//const int error_pattern[] = {300,100, 300, 300};
-//const int special_pattern[] = {300,100, 300, 100, 300, 900};
+int init_pattern[] = {900, 100};
+int normal_pattern[] = {1500, 100, 300, 100};
+int error_pattern[] = {1100, 100, 300, 100, 300, 100};
+//int special_pattern[] = {300,100,300,100,300,900};
 //int wifi_pattern[] = {500,1500};
 
 //prototype declare
@@ -142,7 +149,7 @@ void setup() {
   myCSE7766.setRX(1);
   myCSE7766.begin(); // will initialize serial to 4800 bps
 
-  //pinMode(PUSHBUTTON_PIN, INPUT);
+  //  pinMode(PUSHBUTTON_PIN, INPUT);
   //  pinMode(LED_PIN, OUTPUT);
   //  digitalWrite(LED_PIN, LOW);
   blue_led.setOffSingle();//turn on led
@@ -151,6 +158,30 @@ void setup() {
 
   redis_deviceKey.reserve(80);
   redis_server_addr.reserve(30);
+
+  if (SPIFFS.begin()) {
+    ftpSrv.begin(ftp_user, ftp_password);// Then start FTP server when WiFi connection in On
+  }
+
+  File configFile = SPIFFS.open("/config.txt", "r");
+  if (configFile)
+  {
+    while (configFile.available())
+    {
+      String line = configFile.readStringUntil('\n');
+      String resultstr;
+      if (line.startsWith("ssid")) {
+        resultstr = line.substring(line.indexOf(",") + 1);
+        resultstr.trim();
+        resultstr.toCharArray(ssid, resultstr.length() + 1);
+      } else if (line.startsWith("pass")) {
+        resultstr = line.substring(line.indexOf(",") + 1);
+        resultstr.trim();
+        resultstr.toCharArray(password, resultstr.length() + 1);
+      }
+    }
+  }
+  configFile.close();
 
 #if !USE_MDNS
   WiFi.config(local_IP, primaryDNS, gateway, subnet);
@@ -190,7 +221,6 @@ void setup() {
 
   ElegantOTA.begin(&server);    // Start ElegantOTA
   server.begin();
-  
 
   //// Initialize RemoteDebug
   Debug.begin(HOST_NAME); // Initialize the WiFi server
@@ -212,32 +242,20 @@ void setup() {
 
   EEPROM.begin(512);
 
-//  debugI("Connected to %s", ssid);
-//  debugI("IP address: %s", WiFi.localIP().toString().c_str());
+  debugI("Connected to %s", ssid);
+  debugI("IP address: %s", WiFi.localIP().toString().c_str());
 
-  if (EEPROM.read(REDIS_EEPROM_ADDR_BEGIN) == 0) {
-    EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, redis_deviceKey);
-  } else {
-    redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
-  }
+  redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
+  redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+  redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+  redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
 
-//  if (EEPROM.read(REDIS_EEPROM_SERVER_ADDR) == 0) {
-//    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, redis_server_addr);
-//  } else {
-//    redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
-//  }
-//
-//  if (EEPROM.read(REDIS_EEPROM_SERVER_PORT) == 0) {
-//    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, redis_server_port);
-//  } else {
-//    redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
-//  }
+  debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
+  debugI("redis_server_addr: %s", redis_server_addr.c_str());
+  debugI("redis_server_port: %d", redis_server_port);
+  debugI("redis_server_pass: %s", redis_server_pass.c_str());
 
-//  debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
-//  debugI("redis_server_addr: %s", redis_server_addr.c_str());
-//  debugI("redis_server_port: %d", redis_server_port);
-
-  blue_led.setPatternSingle(normal_pattern, 2);
+  blue_led.setPatternSingle(init_pattern, 2);
 }
 
 void loop()
@@ -262,6 +280,7 @@ void loop()
   S31_Button.update();
   blue_led.update();
   server.handleClient();
+  ftpSrv.handleFTP();
   MDNS.update();
   timeClient.update();
   redisInterface_handle();
@@ -278,20 +297,32 @@ void handleRoot(void) {
   }
 
   redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
-  //redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
-  //redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+  redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+  redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+  redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
 
-  rootPage = "<html><div class=\"container\">";
-  rootPage += "<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>";
+  rootPage = F("<!DOCTYPE html>");
+  rootPage.concat(F("<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"));
+  rootPage.concat(F("</head><body>"));
+  rootPage.concat(F("<style>"));
+  rootPage.concat(F("body{margin:0;font-family:Arial,Helvetica,sans-serif}.sidenav{height:100%;width:200px;position:fixed;z-index:1;top:0;left:0;background-color:maroon;overflow-x:hidden}.sidenav a{color:#fff;padding:16px;text-decoration:none;display:block}.sidenav a:hover{background-color:#fcc;color:maroon}.content{margin-left:200px;padding:20px}"));
+  rootPage.concat(F("</style>"));
+  rootPage.concat(F("<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/update\">OTA</a></div>"));
+  rootPage.concat(F("<div class=\"content\">"));
+  rootPage.concat(F("<h2><span style=\"color: maroon\">I</span>ED</h2>"));
+  rootPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>");
   rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
-  rootPage.concat(F("<label for=\"name1\">Device key:</label>"));
-  rootPage.concat("<input type=\"text\" style=\"width:60%\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"></br>");
-//  rootPage.concat(F("<label for=\"name2\">Redis addr:</label>"));
-//  rootPage.concat("<input type=\"text\" style=\"width:60%\" name=\"name2\" placeholder=\"" + redis_server_addr + "\">");
-//  rootPage.concat(F("<label for=\"name3\">Redis port:</label>"));
-//  rootPage.concat(F("<input type=\"text\" style=\"width:60%\" name=\"name3\" placeholder=\"default 6379\">"));
+  rootPage.concat(F("<label for=\"name1\">Device key:  </label>"));
+  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"></br>");
+  rootPage.concat(F("<label for=\"name2\">Redis addr:  </label>"));
+  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name2\" placeholder=\"" + redis_server_addr + "\"></br>");
+  rootPage.concat(F("<label for=\"name3\">Redis port:  </label>"));
+  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name3\" placeholder=\"" + String(redis_server_port) + "\"></br>");
+  rootPage.concat(F("<label for=\"name4\">Redis pass:  </label>"));
+  rootPage.concat("<input type=\"password\" style=\"width:70%\" name=\"name4\" placeholder=\"" + redis_server_pass + "\"></br>");
   rootPage.concat(F("<input type=\"submit\">"));
-  rootPage.concat(F("</form></div></html>"));
+  rootPage.concat(F("</form></div>"));
+  rootPage.concat(F("</body></html>"));
   // Root web page
   server.send(200, "text/html", rootPage);
 }
@@ -299,53 +330,33 @@ void handleNotFound() {
   server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
 }
 void handleConfig(void) {
-  if ((server.hasArg("name1")) || (server.hasArg("name2")) || (server.hasArg("name3"))) {
+  String configPage;
+  configPage = F("<!DOCTYPE html>");
+  configPage.concat(F("<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"));
+  configPage.concat(F("</head><body><style>"));
+  configPage.concat(F("body{margin:0;font-family:Arial,Helvetica,sans-serif}.sidenav{height:100%;width:200px;position:fixed;z-index:1;top:0;left:0;background-color:maroon;overflow-x:hidden}.sidenav a{color:#fff;padding:16px;text-decoration:none;display:block}.sidenav a:hover{background-color:#fcc;color:maroon}.content{margin-left:200px;padding:20px}"));
+  configPage.concat(F("</style>"));
+  configPage.concat(F("<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/update\">OTA</a></div>"));
+  configPage.concat(F("<div class=\"content\">"));
+  configPage.concat(F("<h2><span style=\"color: maroon\">I</span>ED</h2>"));
+  configPage.concat(F("<div>config ok</div></div>"));
+  configPage.concat(F("</body></html>"));
+  if ((server.hasArg("name1")) && (server.hasArg("name2")) && (server.hasArg("name3")) && (server.hasArg("name4"))) {
     EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, server.arg("name1"));
-//    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, server.arg("name2"));
-//    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, server.arg("name3").toInt());
-    server.send(200, "text/plain", "config ok");
+    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, server.arg("name2"));
+    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, server.arg("name3").toInt());
+    EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, server.arg("name4"));
+
+    redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
+    redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+    redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+    redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
+    server.send(200, "text/html", configPage);
     debugD("config ok");
   } else {
     server.send(200, "text/plain", "config error");
     debugE("config error");
   }
-}
-
-void EEPROM_WriteString(char addr, String data)
-{
-  int _size = data.length();
-  int i;
-  for (i = 0; i < _size; i++)
-  {
-    EEPROM.write(addr + i, data[i]);
-  }
-  EEPROM.write(addr + _size, '\0'); //Add termination null character for String Data
-  EEPROM.commit();
-}
-String EEPROM_ReadString(char addr)
-{
-  int i;
-  char data[100]; //Max 100 Bytes
-  int len = 0;
-  unsigned char k;
-  k = EEPROM.read(addr);
-  while (k != '\0' && len < 200) //Read until null character
-  {
-    k = EEPROM.read(addr + len);
-    data[len] = k;
-    len++;
-  }
-  data[len] = '\0';
-  return String(data);
-}
-void EEPROM_WriteUInt(char address, unsigned int number)
-{
-  EEPROM.write(address, number >> 8);
-  EEPROM.write(address + 1, number & 0xFF);
-}
-unsigned int EEPROM_ReadUInt(char address)
-{
-  return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
 }
 
 void clickbutton_action(void) {
@@ -355,12 +366,50 @@ void clickbutton_action(void) {
     } else {
       debugW("status off\n");
     }
-
     debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
-    blue_led.setPatternSingle(normal_pattern, 2);
+    blue_led.setPatternSingle(init_pattern, 2);
+
+    File configFile = SPIFFS.open("/config.txt", "r");
+    if (configFile)
+    {
+      while (configFile.available())
+      {
+        //read line by line from the file
+        String line = configFile.readStringUntil('\n');
+        String resultstr;
+        if (line.startsWith("ssid")) {
+          resultstr = line.substring(line.indexOf(",") + 1);
+          resultstr.trim();
+          resultstr.toCharArray(ssid, resultstr.length() + 1);
+          debugI("-> %s", resultstr.c_str());
+          debugI("--> %s", ssid);
+        } else if (line.startsWith("pass")) {
+          resultstr = line.substring(line.indexOf(",") + 1);
+          resultstr.trim();
+          resultstr.toCharArray(password, resultstr.length() + 1);
+          debugI("-> %s", resultstr.c_str());
+          debugI("--> %s", password);
+        } else {
+          debugI("%s", line.c_str());
+        }
+      }
+    }
+    configFile.close();
   }
   if (S31_Button.isDoubleClick()) {
     digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
+  }
+  if (S31_Button.isLongClick()) {
+    //restore to default
+    EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
+    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
+    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, REDIS_PORT);
+    EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
+
+    redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
+    redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+    redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+    redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
   }
 }
 void PowerSensorDisplay(void) {
@@ -386,22 +435,23 @@ void redisInterface_handle(void) {
         debugE("Failed to connect to the Redis server!");
         redisInterface_state = 0;
         redisInterface_flag = false;
+        blue_led.setPatternSingle(error_pattern, 6);
         return;
       }
       redisInterface_state++;
     } else if (redisInterface_state == 1) {
       Redis redis(redisConn);
-      auto connRet = redis.authenticate(REDIS_PASSWORD);//RedisReturnValue connRet
+      auto connRet = redis.authenticate(redis_server_pass.c_str());
       if (connRet == RedisSuccess)
       {
         debugD("Connected to the Redis server!");
-        blue_led.setPatternSingle(two_pattern, 4);
+        blue_led.setPatternSingle(normal_pattern, 4);
       } else {
         debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
         redisInterface_state = 0;
         redisInterface_flag = false;
         redisConn.stop();
-        blue_led.setPatternSingle(three_pattern, 6);
+        blue_led.setPatternSingle(error_pattern, 6);
         return;
       }
 
@@ -464,7 +514,7 @@ void redisInterface_handle(void) {
       redisInterface_state++;
     } else if (redisInterface_state == 2) {
       Redis redis(redisConn);
-      auto connRet = redis.authenticate(REDIS_PASSWORD);//RedisReturnValue connRet
+      auto connRet = redis.authenticate(redis_server_pass.c_str());
       if (connRet == RedisSuccess)
       {
         debugD("Connected to the Redis server!");
@@ -544,4 +594,46 @@ void redisInterface_handle(void) {
       redisInterface_flag = false;
     }
   }
+}
+
+void EEPROM_WriteString(char addr, String data)
+{
+  int _size = data.length();
+  int i;
+  for (i = 0; i < _size; i++)
+  {
+    EEPROM.write(addr + i, data[i]);
+  }
+  EEPROM.write(addr + _size, '\0'); //Add termination null character for String Data
+  delay(1);
+  EEPROM.commit();
+  delay(1);
+}
+String EEPROM_ReadString(char addr)
+{
+  int i;
+  char data[100]; //Max 100 Bytes
+  int len = 0;
+  unsigned char k;
+  k = EEPROM.read(addr);
+  while (k != '\0' && len < 99) //Read until null character
+  {
+    k = EEPROM.read(addr + len);
+    data[len] = k;
+    len++;
+  }
+  data[len] = '\0';
+  return String(data);
+}
+void EEPROM_WriteUInt(char address, unsigned int number)
+{
+  EEPROM.write(address, number >> 8);
+  EEPROM.write(address + 1, number & 0xFF);
+  delay(1);
+  EEPROM.commit();
+  delay(1);
+}
+unsigned int EEPROM_ReadUInt(char address)
+{
+  return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
 }

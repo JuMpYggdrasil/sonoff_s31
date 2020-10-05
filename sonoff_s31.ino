@@ -1,9 +1,9 @@
 #define HOST_NAME "s31_1"
 
-#ifndef STASSID
-#define STASSID "JUMP"
-#define STAPSK  "025260652"
-#endif
+#define USE_WiFiManager true
+#define USE_MDNS true
+#define USE_FTP false
+#define USE_OTA true//keep true, if possible.
 
 #define REDIS_ADDR "siriprapawat.trueddns.com"//"192.168.1.22"
 #define REDIS_PORT 14285//6379
@@ -15,7 +15,6 @@
 #define REDIS_EEPROM_SERVER_PASS 132
 //#define REDIS_EEPROM_SERVER_xx 140
 
-
 #define REDIS_DEVKEY "AY4_9_CONV_621MxAY4x500xTTK_LINE2xMx/MMXU1$MX$"//TotW$mag$f
 #define REDIS_VOLTAGE "Volt$mag$f"
 #define REDIS_CURRENT "Curr$mag$f"
@@ -26,11 +25,17 @@
 #define REDIS_ENERGY "E$mag$f"
 #define REDIS_TIMESTAMP "Time$mag$f"
 
-// Board especific libraries
-#if defined ESP8266 || defined ESP32
 
-// Use mDNS ? (comment this do disable it)
-#define USE_MDNS true
+#if defined ESP8266
+
+#if !USE_WiFiManager
+
+#ifndef STASSID
+#define STASSID "JUMP"
+#define STAPSK  "025260652"
+#endif
+
+#endif
 
 //////// Libraries
 //// Hardware config
@@ -45,59 +50,73 @@
 //#define SDA 4//GPIO4 as D RX
 //#define SCL 5//GPIO5 as D TX
 
-
+//using arduino ide 1.8.13
 // Includes of ESP8266
 #include <ESP8266WiFi.h>
-#include <WiFiManager.h>
 #include <ESP8266WebServer.h>
-#include <ESP8266FtpServer.h>
-#include <Redis.h>
-#include <ElegantOTA.h>
-#include <NTPClient.h>
+
+#if USE_WiFiManager
+#include <WiFiManager.h>//tzapu v2.0.3-alpha
+#endif
+
+#if USE_OTA
+#include <ElegantOTA.h>//Ayush Sharma v2.2.4
+#endif
+
+#if USE_FTP
+#include <ESP8266FtpServer.h>//nailbuster
+#endif
+
+#include <Redis.h>//Ryan Joseph v2.1.3
+#include <NTPClient.h>//Fabrice Weinberg v3.2.0
 #include <WiFiUdp.h>
-#include "CSE7766.h"
-#include <PinButton.h>
+#include "CSE7766.h"//ingeniuske custom-modified
+#include <PinButton.h>//Martin Poelstra v1.0.0
 #include <EEPROM.h>
-#include <singleLEDLibrary.h>
+#include <singleLEDLibrary.h>//Pim Ostendorf v1.0.0
 #include <FS.h>
 
-
-#ifdef USE_MDNS
+#if USE_MDNS
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #endif
 
 #else
-#error "The board must be ESP8266 or ESP32"
+#error "The board must be ESP8266"
 #endif // ESP
 
 // Remote debug over WiFi - not recommended for production, only for development
 #include "RemoteDebug.h"        //https://github.com/JoaoLopesF/RemoteDebug
 
+#if !USE_WiFiManager
 // SSID and password
-char* ssid = STASSID;
-char* password = STAPSK;
+const char* ssid PROGMEM = STASSID;
+const char* password PROGMEM = STAPSK;
+#endif
 
-// WWW user and password
-const char* www_username = "admin";
-const char* www_password = "admin";
+// webpage
+const char* www_username PROGMEM = "admin";
+const char* www_password PROGMEM = "admin";
 
+#if USE_FTP
 // FTP
-const char* ftp_user = "admin";
-const char* ftp_password = "admin";
+const char* ftp_user PROGMEM = "admin";
+const char* ftp_password PROGMEM = "admin";
+#endif
 
 String redis_deviceKey = REDIS_DEVKEY;
 String redis_server_addr = REDIS_ADDR;
 uint16_t redis_server_port = REDIS_PORT;
 String redis_server_pass = REDIS_PASS;
-const char* redis_voltage = REDIS_VOLTAGE;
-const char* redis_current = REDIS_CURRENT;
-const char* redis_activepower = REDIS_ACTIVEPOWER;
-const char* redis_apparentpower = REDIS_APPARENTPOWER;
-const char* redis_reactivepower = REDIS_REACTIVEPOWER;
-const char* redis_powerfactor = REDIS_POWERFACTOR;
-const char* redis_energy = REDIS_ENERGY;
-const char* redis_timestamp = REDIS_TIMESTAMP;
+
+const char* redis_voltage PROGMEM = REDIS_VOLTAGE;
+const char* redis_current PROGMEM = REDIS_CURRENT;
+const char* redis_activepower PROGMEM = REDIS_ACTIVEPOWER;
+const char* redis_apparentpower PROGMEM = REDIS_APPARENTPOWER;
+const char* redis_reactivepower PROGMEM = REDIS_REACTIVEPOWER;
+const char* redis_powerfactor PROGMEM = REDIS_POWERFACTOR;
+const char* redis_energy PROGMEM = REDIS_ENERGY;
+const char* redis_timestamp PROGMEM = REDIS_TIMESTAMP;
 
 
 #if !USE_MDNS
@@ -117,9 +136,17 @@ int redisInterface_state = 0;
 CSE7766 myCSE7766;
 PinButton S31_Button(PUSHBUTTON_PIN);
 ESP8266WebServer server(80);
+
+#if USE_FTP
 FtpServer ftpSrv;
+#endif
+
 WiFiClient redisConn;
+
+#if USE_WiFiManager
 WiFiManager wm;
+#endif
+
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
 
@@ -161,30 +188,6 @@ void setup() {
   redis_deviceKey.reserve(80);
   redis_server_addr.reserve(30);
 
-  if (SPIFFS.begin()) {
-    ftpSrv.begin(ftp_user, ftp_password);// Then start FTP server when WiFi connection in On
-  }
-
-  File configFile = SPIFFS.open("/config.txt", "r");
-  if (configFile)
-  {
-    while (configFile.available())
-    {
-      String line = configFile.readStringUntil('\n');
-      //      String resultstr;
-      //      if (line.startsWith("ssid")) {
-      //        resultstr = line.substring(line.indexOf(",") + 1);
-      //        resultstr.trim();
-      //        resultstr.toCharArray(ssid, resultstr.length() + 1);
-      //      } else if (line.startsWith("pass")) {
-      //        resultstr = line.substring(line.indexOf(",") + 1);
-      //        resultstr.trim();
-      //        resultstr.toCharArray(password, resultstr.length() + 1);
-      //      }
-    }
-  }
-  configFile.close();
-
 #if !USE_MDNS
   WiFi.config(local_IP, primaryDNS, gateway, subnet);
 #endif
@@ -192,15 +195,17 @@ void setup() {
   // WiFi connection
   WiFi.mode(WIFI_STA);
 
+#if USE_WiFiManager
   wm.setDebugOutput(false);
   bool res = wm.autoConnect(); // password protected ap
-
-  //  WiFi.begin(ssid, password);
-  //  // Wait for connection
-  //  while (WiFi.status() != WL_CONNECTED) {
-  //    delay(500);
-  //    yield();
-  //  }
+#else
+  WiFi.begin(ssid, password);
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    yield();
+  }
+#endif
 
   // Register host name in WiFi and mDNS
   String hostNameWifi = HOST_NAME;
@@ -210,7 +215,7 @@ void setup() {
   WiFi.hostname(hostNameWifi);
 #endif
 
-#ifdef USE_MDNS  // Use the MDNS ?
+#if USE_MDNS
   if (MDNS.begin(HOST_NAME)) {
     //Serial.print("* MDNS responder started. Hostname -> ");
     //Serial.println(HOST_NAME);
@@ -219,13 +224,43 @@ void setup() {
   MDNS.addService("http", "tcp", 80);
 #endif
 
-  ////==== OTA section ====
+  ////==== webpage assign section ====
   server.on("/", HTTP_GET, handleRoot);
   server.onNotFound(handleNotFound);
   server.on("/config", HTTP_POST, handleConfig);
 
+#if USE_OTA
+  ////==== OTA section ====
   ElegantOTA.begin(&server);    // Start ElegantOTA
+#endif
+
   server.begin();
+
+  if (SPIFFS.begin()) {
+#if USE_FTP
+    ftpSrv.begin(ftp_user, ftp_password);// Then start FTP server when WiFi connection in On
+#endif
+  }
+
+  File configFile = SPIFFS.open("/config.txt", "r");
+  if (configFile)
+  {
+    while (configFile.available())
+    {
+      String line = configFile.readStringUntil('\n');
+      //      String resultstr;
+      //      if (line.startsWith("xxxx")) {
+      //        resultstr = line.substring(line.indexOf(",") + 1);
+      //        resultstr.trim();
+      //        resultstr.toCharArray(XXXX, resultstr.length() + 1);//global char* XXXX = "initial";
+      //      } else if (line.startsWith("yyyy")) {
+      //        resultstr = line.substring(line.indexOf(",") + 1);
+      //        resultstr.trim();
+      //        resultstr.toCharArray(YYYY, resultstr.length() + 1);//global char* YYYY = "initial";
+      //      }
+    }
+  }
+  configFile.close();
 
   //// Initialize RemoteDebug
   Debug.begin(HOST_NAME); // Initialize the WiFi server
@@ -237,7 +272,7 @@ void setup() {
 
   digitalWrite(RELAY_PIN, HIGH);
 
-  // Debug levels
+  /// Debug levels
   debugA("* This is a message of debug level ANY");//always show
   debugV("* This is a message of debug level VERBOSE");
   debugD("* This is a message of debug level DEBUG");
@@ -247,7 +282,6 @@ void setup() {
 
   EEPROM.begin(512);
 
-  debugI("Connected to %s", ssid);
   debugI("IP address: %s", WiFi.localIP().toString().c_str());
 
   redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
@@ -285,8 +319,12 @@ void loop()
   S31_Button.update();
   blue_led.update();
   server.handleClient();
+#if USE_FTP
   ftpSrv.handleFTP();
+#endif
+#if USE_MDNS
   MDNS.update();
+#endif
   timeClient.update();
   redisInterface_handle();
 
@@ -310,7 +348,7 @@ void handleRoot(void) {
   rootPage.concat(F("<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"));
   rootPage.concat(F("</head><body>"));
   rootPage.concat(F("<style>"));
-  rootPage.concat(F("body{margin:0;font-family:Arial,Helvetica,sans-serif}.sidenav{height:100%;width:200px;position:fixed;z-index:1;top:0;left:0;background-color:maroon;overflow-x:hidden}.sidenav a{color:#fff;padding:16px;text-decoration:none;display:block}.sidenav a:hover{background-color:#fcc;color:maroon}.content{margin-left:200px;padding:20px}"));
+  rootPage.concat(F("body{margin:0;font-family:Arial,Helvetica,sans-serif}.sidenav{height:100%;width:180px;position:fixed;z-index:1;top:0;left:0;background-color:maroon;overflow-x:hidden}.sidenav a{color:#fff;padding:16px;text-decoration:none;display:block}.sidenav a:hover{background-color:#fcc;color:maroon}.content{margin-left:180px;padding:20px}"));
   rootPage.concat(F("</style>"));
   rootPage.concat(F("<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/update\">OTA</a></div>"));
   rootPage.concat(F("<div class=\"content\">"));
@@ -339,7 +377,7 @@ void handleConfig(void) {
   configPage = F("<!DOCTYPE html>");
   configPage.concat(F("<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"));
   configPage.concat(F("</head><body><style>"));
-  configPage.concat(F("body{margin:0;font-family:Arial,Helvetica,sans-serif}.sidenav{height:100%;width:200px;position:fixed;z-index:1;top:0;left:0;background-color:maroon;overflow-x:hidden}.sidenav a{color:#fff;padding:16px;text-decoration:none;display:block}.sidenav a:hover{background-color:#fcc;color:maroon}.content{margin-left:200px;padding:20px}"));
+  configPage.concat(F("body{margin:0;font-family:Arial,Helvetica,sans-serif}.sidenav{height:100%;width:180px;position:fixed;z-index:1;top:0;left:0;background-color:maroon;overflow-x:hidden}.sidenav a{color:#fff;padding:16px;text-decoration:none;display:block}.sidenav a:hover{background-color:#fcc;color:maroon}.content{margin-left:180px;padding:20px}"));
   configPage.concat(F("</style>"));
   configPage.concat(F("<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/update\">OTA</a></div>"));
   configPage.concat(F("<div class=\"content\">"));
@@ -384,22 +422,23 @@ void clickbutton_action(void) {
       {
         //read line by line from the file
         String line = configFile.readStringUntil('\n');
-        String resultstr;
-        if (line.startsWith("ssid")) {
-          resultstr = line.substring(line.indexOf(",") + 1);
-          resultstr.trim();
-          resultstr.toCharArray(ssid, resultstr.length() + 1);
-          debugI("-> %s", resultstr.c_str());
-          debugI("--> %s", ssid);
-        } else if (line.startsWith("pass")) {
-          resultstr = line.substring(line.indexOf(",") + 1);
-          resultstr.trim();
-          resultstr.toCharArray(password, resultstr.length() + 1);
-          debugI("-> %s", resultstr.c_str());
-          debugI("--> %s", password);
-        } else {
-          debugI("%s", line.c_str());
-        }
+        debugI("%s", line.c_str());
+        //        String resultstr;
+        //        if (line.startsWith("ssid")) {
+        //          resultstr = line.substring(line.indexOf(",") + 1);
+        //          resultstr.trim();
+        //          resultstr.toCharArray(ssid, resultstr.length() + 1);
+        //          debugI("-> %s", resultstr.c_str());
+        //          debugI("--> %s", ssid);
+        //        } else if (line.startsWith("pass")) {
+        //          resultstr = line.substring(line.indexOf(",") + 1);
+        //          resultstr.trim();
+        //          resultstr.toCharArray(password, resultstr.length() + 1);
+        //          debugI("-> %s", resultstr.c_str());
+        //          debugI("--> %s", password);
+        //        } else {
+        //          debugI("%s", line.c_str());
+        //        }
       }
     }
     configFile.close();
@@ -418,9 +457,10 @@ void clickbutton_action(void) {
     redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
     redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
     redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
-
+#if USE_WiFiManager
     wm.resetSettings();
     ESP.restart();
+#endif
   }
 }
 void PowerSensorDisplay(void) {

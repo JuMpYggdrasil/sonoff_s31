@@ -48,17 +48,19 @@
 
 // Includes of ESP8266
 #include <ESP8266WiFi.h>
-#include "CSE7766.h"
-#include <PinButton.h>
+#include <WiFiManager.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266FtpServer.h>
 #include <Redis.h>
 #include <ElegantOTA.h>
-#include <EEPROM.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include "CSE7766.h"
+#include <PinButton.h>
+#include <EEPROM.h>
 #include <singleLEDLibrary.h>
 #include <FS.h>
+
 
 #ifdef USE_MDNS
 #include <DNSServer.h>
@@ -117,7 +119,7 @@ PinButton S31_Button(PUSHBUTTON_PIN);
 ESP8266WebServer server(80);
 FtpServer ftpSrv;
 WiFiClient redisConn;
-
+WiFiManager wm;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
 
@@ -169,16 +171,16 @@ void setup() {
     while (configFile.available())
     {
       String line = configFile.readStringUntil('\n');
-      String resultstr;
-      if (line.startsWith("ssid")) {
-        resultstr = line.substring(line.indexOf(",") + 1);
-        resultstr.trim();
-        resultstr.toCharArray(ssid, resultstr.length() + 1);
-      } else if (line.startsWith("pass")) {
-        resultstr = line.substring(line.indexOf(",") + 1);
-        resultstr.trim();
-        resultstr.toCharArray(password, resultstr.length() + 1);
-      }
+      //      String resultstr;
+      //      if (line.startsWith("ssid")) {
+      //        resultstr = line.substring(line.indexOf(",") + 1);
+      //        resultstr.trim();
+      //        resultstr.toCharArray(ssid, resultstr.length() + 1);
+      //      } else if (line.startsWith("pass")) {
+      //        resultstr = line.substring(line.indexOf(",") + 1);
+      //        resultstr.trim();
+      //        resultstr.toCharArray(password, resultstr.length() + 1);
+      //      }
     }
   }
   configFile.close();
@@ -189,13 +191,16 @@ void setup() {
 
   // WiFi connection
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
 
-  // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    yield();
-  }
+  wm.setDebugOutput(false);
+  bool res = wm.autoConnect(); // password protected ap
+
+  //  WiFi.begin(ssid, password);
+  //  // Wait for connection
+  //  while (WiFi.status() != WL_CONNECTED) {
+  //    delay(500);
+  //    yield();
+  //  }
 
   // Register host name in WiFi and mDNS
   String hostNameWifi = HOST_NAME;
@@ -367,6 +372,9 @@ void clickbutton_action(void) {
       debugW("status off\n");
     }
     debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
+    debugI("redis_server_addr: %s", redis_server_addr.c_str());
+    debugI("redis_server_port: %d", redis_server_port);
+    debugI("redis_server_pass: %s", redis_server_pass.c_str());
     blue_led.setPatternSingle(init_pattern, 2);
 
     File configFile = SPIFFS.open("/config.txt", "r");
@@ -410,6 +418,9 @@ void clickbutton_action(void) {
     redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
     redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
     redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
+
+    wm.resetSettings();
+    ESP.restart();
   }
 }
 void PowerSensorDisplay(void) {

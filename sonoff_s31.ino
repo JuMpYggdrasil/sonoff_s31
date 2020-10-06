@@ -2,8 +2,9 @@
 
 #define USE_WiFiManager true
 #define USE_MDNS true
-#define USE_FTP false
+#define USE_FTP true
 #define USE_OTA true//keep true, if possible.
+#define USE_TELNET true
 
 #define REDIS_ADDR "siriprapawat.trueddns.com"//"192.168.1.22"
 #define REDIS_PORT 14285//6379
@@ -81,12 +82,15 @@
 #include <ESP8266mDNS.h>
 #endif
 
+#if USE_TELNET
+// Remote debug over WiFi - not recommended for production, only for development
+#include "RemoteDebug.h" //https://github.com/JoaoLopesF/RemoteDebug
+#endif
+
 #else
 #error "The board must be ESP8266"
 #endif // ESP
 
-// Remote debug over WiFi - not recommended for production, only for development
-#include "RemoteDebug.h"        //https://github.com/JoaoLopesF/RemoteDebug
 
 #if !USE_WiFiManager
 // SSID and password
@@ -133,7 +137,7 @@ uint32_t mTimeSeconds = 0;
 bool redisInterface_flag = false;
 int redisInterface_state = 0;
 
-CSE7766 myCSE7766;
+CSE7766 cse7766;
 PinButton S31_Button(PUSHBUTTON_PIN);
 ESP8266WebServer server(80);
 
@@ -149,9 +153,11 @@ WiFiManager wm;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
-
 sllib blue_led(LED_PIN);
+
+#if USE_TELNET
 RemoteDebug Debug;
+#endif
 
 int init_pattern[] = {900, 100};
 int normal_pattern[] = {1500, 100, 300, 100};
@@ -175,8 +181,8 @@ unsigned int EEPROM_ReadUInt(char address);
 
 void setup() {
   // Initialize
-  myCSE7766.setRX(1);
-  myCSE7766.begin(); // will initialize serial to 4800 bps
+  cse7766.setRX(1);
+  cse7766.begin(); // will initialize serial to 4800 bps
 
   //  pinMode(PUSHBUTTON_PIN, INPUT);
   //  pinMode(LED_PIN, OUTPUT);
@@ -262,16 +268,19 @@ void setup() {
   }
   configFile.close();
 
+#if USE_TELNET
   //// Initialize RemoteDebug
   Debug.begin(HOST_NAME); // Initialize the WiFi server
   Debug.setResetCmdEnabled(true); // Enable the reset command
   Debug.showProfiler(true); // Profiler (Good to measure times, to optimize codes)
   Debug.showColors(true); // Colors
+#endif
 
   timeClient.begin();
 
   digitalWrite(RELAY_PIN, HIGH);
 
+#if USE_TELNET
   /// Debug levels
   debugA("* This is a message of debug level ANY");//always show
   debugV("* This is a message of debug level VERBOSE");
@@ -279,20 +288,24 @@ void setup() {
   debugI("* This is a message of debug level INFO");
   debugW("* This is a message of debug level WARNING");
   debugE("* This is a message of debug level ERROR");
+#endif
 
   EEPROM.begin(512);
 
-  debugI("IP address: %s", WiFi.localIP().toString().c_str());
+
 
   redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
   redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
   redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
   redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
 
+#if USE_TELNET
+  debugI("IP address: %s", WiFi.localIP().toString().c_str());
   debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
   debugI("redis_server_addr: %s", redis_server_addr.c_str());
   debugI("redis_server_port: %d", redis_server_port);
   debugI("redis_server_pass: %s", redis_server_pass.c_str());
+#endif
 
   blue_led.setPatternSingle(init_pattern, 2);
 }
@@ -314,8 +327,11 @@ void loop()
   }
   clickbutton_action();
 
-  myCSE7766.handle();// CSE7766 handle
+  cse7766.handle();// CSE7766 handle
+#if USE_TELNET
   Debug.handle();// RemoteDebug handle
+#endif
+
   S31_Button.update();
   blue_led.update();
   server.handleClient();
@@ -352,7 +368,7 @@ void handleRoot(void) {
   rootPage.concat(F("</style>"));
   rootPage.concat(F("<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/update\">OTA</a></div>"));
   rootPage.concat(F("<div class=\"content\">"));
-  rootPage.concat(F("<h2><span style=\"color: maroon\">I</span>ED</h2>"));
+  rootPage.concat(F("<h2><span style=\"color: maroon\">I</span>ED_</h2>"));
   rootPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>");
   rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
   rootPage.concat(F("<label for=\"name1\">Device key:  </label>"));
@@ -395,15 +411,20 @@ void handleConfig(void) {
     redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
     redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
     server.send(200, "text/html", configPage);
+#if USE_TELNET
     debugD("config ok");
+#endif
   } else {
     server.send(200, "text/plain", "config error");
+#if USE_TELNET
     debugE("config error");
+#endif
   }
 }
 
 void clickbutton_action(void) {
   if (S31_Button.isSingleClick()) {
+#if USE_TELNET
     if (digitalRead(RELAY_PIN)) {
       debugW("status on\n");
     } else {
@@ -413,6 +434,8 @@ void clickbutton_action(void) {
     debugI("redis_server_addr: %s", redis_server_addr.c_str());
     debugI("redis_server_port: %d", redis_server_port);
     debugI("redis_server_pass: %s", redis_server_pass.c_str());
+    //debugI("cse7766: %s", cse7766.description().c_str());
+#endif
     blue_led.setPatternSingle(init_pattern, 2);
 
     File configFile = SPIFFS.open("/config.txt", "r");
@@ -422,7 +445,9 @@ void clickbutton_action(void) {
       {
         //read line by line from the file
         String line = configFile.readStringUntil('\n');
+#if USE_TELNET
         debugI("%s", line.c_str());
+#endif
         //        String resultstr;
         //        if (line.startsWith("ssid")) {
         //          resultstr = line.substring(line.indexOf(",") + 1);
@@ -464,13 +489,15 @@ void clickbutton_action(void) {
   }
 }
 void PowerSensorDisplay(void) {
-  debugV("Voltage %.4f V\n", myCSE7766.getVoltage());
-  debugV("Current %.4f A\n", myCSE7766.getCurrent());
-  debugV("ActivePower %.4f W\n", myCSE7766.getActivePower());
-  debugV("ApparentPower %.4f VA\n", myCSE7766.getApparentPower());
-  debugV("ReactivePower %.4f VAR\n", myCSE7766.getReactivePower());
-  debugV("PowerFactor %.4f %%\n", myCSE7766.getPowerFactor());
-  debugV("Energy %.4f Ws\n", myCSE7766.getEnergy());
+#if USE_TELNET
+  debugV("Voltage %.4f V\n", cse7766.getVoltage());
+  debugV("Current %.4f A\n", cse7766.getCurrent());
+  debugV("ActivePower %.4f W\n", cse7766.getActivePower());
+  debugV("ApparentPower %.4f VA\n", cse7766.getApparentPower());
+  debugV("ReactivePower %.4f VAR\n", cse7766.getReactivePower());
+  debugV("PowerFactor %.4f %%\n", cse7766.getPowerFactor());
+  debugV("Energy %.4f Ws\n", cse7766.getEnergy());
+#endif
 }
 
 void redisInterface_handle(void) {
@@ -483,7 +510,9 @@ void redisInterface_handle(void) {
     if (redisInterface_state == 0) {
       if (!redisConn.connect(redis_server_addr.c_str(), redis_server_port))
       {
+#if USE_TELNET
         debugE("Failed to connect to the Redis server!");
+#endif
         redisInterface_state = 0;
         redisInterface_flag = false;
         blue_led.setPatternSingle(error_pattern, 6);
@@ -495,10 +524,14 @@ void redisInterface_handle(void) {
       auto connRet = redis.authenticate(redis_server_pass.c_str());
       if (connRet == RedisSuccess)
       {
+#if USE_TELNET
         debugD("Connected to the Redis server!");
+#endif
         blue_led.setPatternSingle(normal_pattern, 4);
       } else {
+#if USE_TELNET
         debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
+#endif
         redisInterface_state = 0;
         redisInterface_flag = false;
         redisConn.stop();
@@ -508,9 +541,12 @@ void redisInterface_handle(void) {
 
       // Voltage
       redis_key = redis_deviceKey + String(redis_voltage);
-      cse7766_value = String(myCSE7766.getVoltage());
+      cse7766_value = String(cse7766.getVoltage());
+#if USE_TELNET
       debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
       redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
       if (redis_bool_result) {
         debugD("ok!");
       } else {
@@ -519,12 +555,16 @@ void redisInterface_handle(void) {
 
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 
       // Current
       redis_key = redis_deviceKey + String(redis_current);
-      cse7766_value = String(myCSE7766.getCurrent());
+      cse7766_value = String(cse7766.getCurrent());
+#if USE_TELNET
       debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
       redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
       if (redis_bool_result) {
         debugD("ok!");
       } else {
@@ -533,12 +573,15 @@ void redisInterface_handle(void) {
 
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
-
+#endif
       // ActivePower
       redis_key = redis_deviceKey + String(redis_activepower);
-      cse7766_value = String(myCSE7766.getActivePower());
+      cse7766_value = String(cse7766.getActivePower());
+#if USE_TELNET
       debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
       redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
       if (redis_bool_result) {
         debugD("ok!");
       } else {
@@ -547,12 +590,16 @@ void redisInterface_handle(void) {
 
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 
       // ApparentPower
       redis_key = redis_deviceKey + String(redis_apparentpower);
-      cse7766_value = String(myCSE7766.getApparentPower());
+      cse7766_value = String(cse7766.getApparentPower());
+#if USE_TELNET
       debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
       redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
       if (redis_bool_result) {
         debugD("ok!");
       } else {
@@ -561,6 +608,7 @@ void redisInterface_handle(void) {
 
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 
       redisInterface_state++;
     } else if (redisInterface_state == 2) {
@@ -568,9 +616,13 @@ void redisInterface_handle(void) {
       auto connRet = redis.authenticate(redis_server_pass.c_str());
       if (connRet == RedisSuccess)
       {
+#if USE_TELNET
         debugD("Connected to the Redis server!");
+#endif
       } else {
+#if USE_TELNET
         debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
+#endif
         redisInterface_state = 0;
         redisInterface_flag = false;
         redisConn.stop();
@@ -579,37 +631,47 @@ void redisInterface_handle(void) {
 
       // ReactivePower
       redis_key = redis_deviceKey + String(redis_reactivepower);
-      cse7766_value = String(myCSE7766.getReactivePower());
+      cse7766_value = String(cse7766.getReactivePower());
+#if USE_TELNET
       debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
       redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
       if (redis_bool_result) {
         debugD("ok!");
       } else {
         debugE("err");
       }
-
       redis_str_result = redis.get(redis_key.c_str());
+
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 
       // PowerFactor
       redis_key = redis_deviceKey + String(redis_powerfactor);
-      cse7766_value = String(myCSE7766.getPowerFactor());
+      cse7766_value = String(cse7766.getPowerFactor());
+#if USE_TELNET
       debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
       redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
       if (redis_bool_result) {
         debugD("ok!");
       } else {
         debugE("err");
       }
-
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 
       // Energy
       redis_key = redis_deviceKey + String(redis_energy);
-      cse7766_value = String(myCSE7766.getEnergy());
+      cse7766_value = String(cse7766.getEnergy());
+#if USE_TELNET
       debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
       redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
       if (redis_bool_result) {
         debugD("ok!");
       } else {
@@ -618,12 +680,16 @@ void redisInterface_handle(void) {
 
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 
       // TimeStamp
       redis_key = redis_deviceKey + String(redis_timestamp);
       String timeStamp = timeClient.getFormattedTime();
+#if USE_TELNET
       debugD("SET %s %s: ", redis_key.c_str(), timeStamp.c_str());
+#endif
       redis_bool_result = redis.set(redis_key.c_str(), timeStamp.c_str());
+#if USE_TELNET
       if (redis_bool_result) {
         debugD("ok!");
       } else {
@@ -632,11 +698,14 @@ void redisInterface_handle(void) {
 
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 
       redisInterface_state++;
     } else if (redisInterface_state == 3) {
       redisConn.stop();
+#if USE_TELNET
       debugD("Connection closed!");
+#endif
 
       redisInterface_state = 0;
       redisInterface_flag = false;

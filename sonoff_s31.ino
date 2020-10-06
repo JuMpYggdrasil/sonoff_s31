@@ -1,3 +1,5 @@
+#include <ArduinoOTA.h>
+
 #define HOST_NAME "s31_1"
 
 #define USE_WiFiManager true
@@ -60,12 +62,22 @@
 #include <WiFiManager.h>//tzapu v2.0.3-alpha
 #endif
 
-#if USE_OTA
-#include <ElegantOTA.h>//Ayush Sharma v2.2.4
+#if USE_MDNS
+#include <DNSServer.h>
+#include <ESP8266mDNS.h>
 #endif
 
 #if USE_FTP
 #include <ESP8266FtpServer.h>//nailbuster
+#endif
+
+#if USE_OTA
+#include <ElegantOTA.h>//Ayush Sharma v2.2.4
+#endif
+
+#if USE_TELNET
+// Remote debug over WiFi - not recommended for production, only for development
+#include "RemoteDebug.h" //https://github.com/JoaoLopesF/RemoteDebug
 #endif
 
 #include <Redis.h>//Ryan Joseph v2.1.3
@@ -77,19 +89,9 @@
 #include <singleLEDLibrary.h>//Pim Ostendorf v1.0.0
 #include <FS.h>
 
-#if USE_MDNS
-#include <DNSServer.h>
-#include <ESP8266mDNS.h>
-#endif
-
-#if USE_TELNET
-// Remote debug over WiFi - not recommended for production, only for development
-#include "RemoteDebug.h" //https://github.com/JoaoLopesF/RemoteDebug
-#endif
-
 #else
 #error "The board must be ESP8266"
-#endif // ESP
+#endif // ESP8266
 
 
 #if !USE_WiFiManager
@@ -122,12 +124,23 @@ const char* redis_powerfactor PROGMEM = REDIS_POWERFACTOR;
 const char* redis_energy PROGMEM = REDIS_ENERGY;
 const char* redis_timestamp PROGMEM = REDIS_TIMESTAMP;
 
+#if USE_WiFiManager
+WiFiManager wm;
+#endif
 
 #if !USE_MDNS
 IPAddress local_IP(192, 168, 1, 17);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(192, 168, 1, 1);
+#endif
+
+#if USE_FTP
+FtpServer ftpSrv;
+#endif
+
+#if USE_TELNET
+RemoteDebug Debug;
 #endif
 
 // Time
@@ -140,24 +153,11 @@ int redisInterface_state = 0;
 CSE7766 cse7766;
 PinButton S31_Button(PUSHBUTTON_PIN);
 ESP8266WebServer server(80);
-
-#if USE_FTP
-FtpServer ftpSrv;
-#endif
-
 WiFiClient redisConn;
-
-#if USE_WiFiManager
-WiFiManager wm;
-#endif
-
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
 sllib blue_led(LED_PIN);
 
-#if USE_TELNET
-RemoteDebug Debug;
-#endif
 
 int init_pattern[] = {900, 100};
 int normal_pattern[] = {1500, 100, 300, 100};
@@ -236,7 +236,6 @@ void setup() {
   server.on("/config", HTTP_POST, handleConfig);
 
 #if USE_OTA
-  ////==== OTA section ====
   ElegantOTA.begin(&server);    // Start ElegantOTA
 #endif
 
@@ -292,8 +291,6 @@ void setup() {
 
   EEPROM.begin(512);
 
-
-
   redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
   redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
   redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
@@ -326,23 +323,26 @@ void loop()
     }
   }
   clickbutton_action();
-
   cse7766.handle();// CSE7766 handle
-#if USE_TELNET
-  Debug.handle();// RemoteDebug handle
-#endif
-
   S31_Button.update();
   blue_led.update();
   server.handleClient();
-#if USE_FTP
-  ftpSrv.handleFTP();
-#endif
+  timeClient.update();
+  redisInterface_handle();
+
 #if USE_MDNS
   MDNS.update();
 #endif
-  timeClient.update();
-  redisInterface_handle();
+
+#if USE_FTP
+  ftpSrv.handleFTP();
+#endif
+
+#if USE_TELNET
+  Debug.handle();// RemoteDebug handle
+#endif 
+
+
 
   // Give a time for ESP
   yield();

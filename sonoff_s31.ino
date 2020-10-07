@@ -202,6 +202,8 @@ void setup() {
   WiFi.mode(WIFI_STA);
 
 #if USE_WiFiManager
+  wm.setConfigPortalTimeout(180);
+  wm.setAPClientCheck(true);
   wm.setDebugOutput(false);
   bool res = wm.autoConnect(); // password protected ap
 #else
@@ -340,7 +342,7 @@ void loop()
 
 #if USE_TELNET
   Debug.handle();// RemoteDebug handle
-#endif 
+#endif
 
 
 

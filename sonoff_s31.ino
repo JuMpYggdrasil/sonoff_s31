@@ -1,10 +1,8 @@
-#include <ArduinoOTA.h>
-
 #define HOST_NAME "s31_1"
 
 #define USE_WiFiManager true
 #define USE_MDNS true
-#define USE_FTP true
+#define USE_FTP false
 #define USE_OTA true//keep true, if possible.
 #define USE_TELNET true
 
@@ -18,14 +16,15 @@
 #define REDIS_EEPROM_SERVER_PASS 132
 //#define REDIS_EEPROM_SERVER_xx 140
 
-#define REDIS_DEVKEY "AY4_9_CONV_621MxAY4x500xTTK_LINE2xMx/MMXU1$MX$"//TotW$mag$f
-#define REDIS_VOLTAGE "Volt$mag$f"
-#define REDIS_CURRENT "Curr$mag$f"
+#define REDIS_DEVKEY "ACBUSx220xengMMTR1/MMXU1$MX$"
+#define REDIS_VOLTAGE "PhV$mag$f"
+#define REDIS_CURRENT "A$mag$f"
 #define REDIS_ACTIVEPOWER "TotW$mag$f"//P
-#define REDIS_APPARENTPOWER "Va$mag$f"//S
-#define REDIS_REACTIVEPOWER "Var$mag$f"//Q
-#define REDIS_POWERFACTOR "Pf$mag$f"
-#define REDIS_ENERGY "E$mag$f"
+#define REDIS_APPARENTPOWER "TotVA$mag$f"//S
+#define REDIS_REACTIVEPOWER "TotVAr$mag$f"//Q
+#define REDIS_POWERFACTOR "TotPF$mag$f"
+#define REDIS_ENERGY "TotWh$mag$f"
+//#define REDIS_FREQUENCY "Hz$mag$f"
 #define REDIS_TIMESTAMP "Time$mag$f"
 
 
@@ -158,7 +157,6 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
 sllib blue_led(LED_PIN);
 
-
 int init_pattern[] = {900, 100};
 int normal_pattern[] = {1500, 100, 300, 100};
 int error_pattern[] = {1100, 100, 300, 100, 300, 100};
@@ -202,10 +200,12 @@ void setup() {
   WiFi.mode(WIFI_STA);
 
 #if USE_WiFiManager
-  wm.setConfigPortalTimeout(180);
-  wm.setAPClientCheck(true);
+  //sets timeout for which to attempt connecting, useful if you get a lot of failed connects
+  //wm.setConnectTimeout(20);     // how long to try to connect for before continuing
+  // ConnectTimeout calback???? default 10 sec
+
   wm.setDebugOutput(false);
-  bool res = wm.autoConnect(); // password protected ap
+  bool res = wm.autoConnect();    // password protected ap
 #else
   WiFi.begin(ssid, password);
   // Wait for connection
@@ -320,9 +320,8 @@ void loop()
     if (mTimeSeconds % 5 == 0) { // Each 5 seconds
       PowerSensorDisplay();
     }
-    if (mTimeSeconds % 30 == 0) {
-      redisInterface_flag = true;
-    }
+
+    redisInterface_flag = true;
   }
   clickbutton_action();
   cse7766.handle();// CSE7766 handle
@@ -343,8 +342,6 @@ void loop()
 #if USE_TELNET
   Debug.handle();// RemoteDebug handle
 #endif
-
-
 
   // Give a time for ESP
   yield();
@@ -370,7 +367,7 @@ void handleRoot(void) {
   rootPage.concat(F("</style>"));
   rootPage.concat(F("<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/update\">OTA</a></div>"));
   rootPage.concat(F("<div class=\"content\">"));
-  rootPage.concat(F("<h2><span style=\"color: maroon\">I</span>ED_</h2>"));
+  rootPage.concat(F("<h2><span style=\"color: maroon\">I</span>ED</h2>"));
   rootPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>");
   rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
   rootPage.concat(F("<label for=\"name1\">Device key:  </label>"));
@@ -425,18 +422,47 @@ void handleConfig(void) {
 }
 
 void clickbutton_action(void) {
+  if (S31_Button.isClick()) {
+#if USE_TELNET
+    debugW("Click");
+#endif
+  }
   if (S31_Button.isSingleClick()) {
 #if USE_TELNET
+    debugI("SingleClick");
     if (digitalRead(RELAY_PIN)) {
-      debugW("status on\n");
+      debugI("status on\n");
     } else {
-      debugW("status off\n");
+      debugI("status off\n");
     }
     debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
     debugI("redis_server_addr: %s", redis_server_addr.c_str());
     debugI("redis_server_port: %d", redis_server_port);
     debugI("redis_server_pass: %s", redis_server_pass.c_str());
     //debugI("cse7766: %s", cse7766.description().c_str());
+    debugW("ssid %s", WiFi.SSID().c_str());
+
+    //WL_IDLE_STATUS: it is a temporary status assigned when WiFi.begin() is called and remains active until the number of attempts expires (resulting in WL_CONNECT_FAILED) or a connection is established (resulting in WL_CONNECTED);
+
+    if (WiFi.status() == WL_CONNECTED) {
+      debugW("connected");
+    } else if (WiFi.status() == WL_NO_SHIELD) {
+      debugW("no WiFi shield is present");
+    } else if (WiFi.status() == WL_IDLE_STATUS) {
+      debugW("idle");
+    } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
+      debugW("no SSID are available");
+    } else if (WiFi.status() == WL_SCAN_COMPLETED) {
+      debugW("scan networks is completed");
+    } else if (WiFi.status() == WL_CONNECT_FAILED) {
+      debugW("connection fails for all the attempts");
+    } else if (WiFi.status() == WL_CONNECTION_LOST) {
+      debugW("connection is lost");
+    } else if (WiFi.status() == WL_DISCONNECTED) {
+      debugW("disconnected from a network");
+    } else {
+      debugW("status error");
+    }
 #endif
     blue_led.setPatternSingle(init_pattern, 2);
 
@@ -472,6 +498,9 @@ void clickbutton_action(void) {
   }
   if (S31_Button.isDoubleClick()) {
     digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
+#if USE_TELNET
+    debugI("DoubleClick");
+#endif
   }
   if (S31_Button.isLongClick()) {
     //restore to default
@@ -484,6 +513,11 @@ void clickbutton_action(void) {
     redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
     redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
     redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
+
+#if USE_TELNET
+    debugI("LongClick");
+#endif
+
 #if USE_WiFiManager
     wm.resetSettings();
     ESP.restart();
@@ -523,22 +557,25 @@ void redisInterface_handle(void) {
       redisInterface_state++;
     } else if (redisInterface_state == 1) {
       Redis redis(redisConn);
-      auto connRet = redis.authenticate(redis_server_pass.c_str());
-      if (connRet == RedisSuccess)
-      {
+      if (redis_server_pass != "") {
+        auto connRet = redis.authenticate(redis_server_pass.c_str());
+
+        if (connRet == RedisSuccess)
+        {
 #if USE_TELNET
-        debugD("Connected to the Redis server!");
+          debugD("Connected to the Redis server!");
 #endif
-        blue_led.setPatternSingle(normal_pattern, 4);
-      } else {
+          blue_led.setPatternSingle(normal_pattern, 4);
+        } else {
 #if USE_TELNET
-        debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
+          debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
 #endif
-        redisInterface_state = 0;
-        redisInterface_flag = false;
-        redisConn.stop();
-        blue_led.setPatternSingle(error_pattern, 6);
-        return;
+          redisInterface_state = 0;
+          redisInterface_flag = false;
+          redisConn.stop();
+          blue_led.setPatternSingle(error_pattern, 6);
+          return;
+        }
       }
 
       // Voltage
@@ -615,20 +652,23 @@ void redisInterface_handle(void) {
       redisInterface_state++;
     } else if (redisInterface_state == 2) {
       Redis redis(redisConn);
-      auto connRet = redis.authenticate(redis_server_pass.c_str());
-      if (connRet == RedisSuccess)
-      {
+      if (redis_server_pass != "") {
+        auto connRet = redis.authenticate(redis_server_pass.c_str());
+
+        if (connRet == RedisSuccess)
+        {
 #if USE_TELNET
-        debugD("Connected to the Redis server!");
+          debugD("Connected to the Redis server!");
 #endif
-      } else {
+        } else {
 #if USE_TELNET
-        debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
+          debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
 #endif
-        redisInterface_state = 0;
-        redisInterface_flag = false;
-        redisConn.stop();
-        return;
+          redisInterface_state = 0;
+          redisInterface_flag = false;
+          redisConn.stop();
+          return;
+        }
       }
 
       // ReactivePower

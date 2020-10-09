@@ -171,12 +171,12 @@ void redisInterface_handle(void);
 void handleRoot();
 void handleNotFound();
 void handleConfig();
+void handleInfo(void);
 
 void EEPROM_WriteString(char addr, String data);
 String EEPROM_ReadString(char addr);
 void EEPROM_WriteUInt(char address, unsigned int number);
 unsigned int EEPROM_ReadUInt(char address);
-
 
 const char WEB_HEAD[] PROGMEM = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
 const char WEB_STYLE[] PROGMEM = "<link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\">";
@@ -378,12 +378,12 @@ void handleRoot(void) {
   redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
   redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
 
-  rootPage.concat(WEB_HEAD);
-  rootPage.concat(WEB_STYLE);
-  rootPage.concat(WEB_BODY_START);
-  rootPage.concat(WEB_SIDENAV);
-  rootPage.concat(WEB_CONTENT_START);
-  
+  rootPage.concat(FPSTR(WEB_HEAD));
+  rootPage.concat(FPSTR(WEB_STYLE));
+  rootPage.concat(FPSTR(WEB_BODY_START));
+  rootPage.concat(FPSTR(WEB_SIDENAV));
+  rootPage.concat(FPSTR(WEB_CONTENT_START));
+
   rootPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div><br>");
   rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
   rootPage.concat(F("<label for=\"name1\">Device key:  </label>"));
@@ -402,7 +402,8 @@ void handleRoot(void) {
   rootPage.concat(F("<form action=\"/off\" method=\"POST\">"));
   rootPage.concat(F("<input type=\"submit\" value=\"relay off\">"));
   rootPage.concat(F("</form>"));
-  rootPage.concat(WEB_BODY_END);
+  rootPage.concat(FPSTR(WEB_BODY_END));
+  
   // Root web page
   server.send(200, "text/html", rootPage);
 }
@@ -410,18 +411,18 @@ void handleNotFound() {
   server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
 }
 void handleInfo(void) {
-  String infoPage="";
+  String infoPage = "";
   //authentication
   if (!server.authenticate(www_username, www_password)) {
     return server.requestAuthentication();
   }
 
-  infoPage.concat(WEB_HEAD);
-  infoPage.concat(WEB_STYLE);
-  infoPage.concat(WEB_BODY_START);
-  infoPage.concat(WEB_SIDENAV);
-  infoPage.concat(WEB_CONTENT_START);
-  
+  infoPage.concat(FPSTR(WEB_HEAD));
+  infoPage.concat(FPSTR(WEB_STYLE));
+  infoPage.concat(FPSTR(WEB_BODY_START));
+  infoPage.concat(FPSTR(WEB_SIDENAV));
+  infoPage.concat(FPSTR(WEB_CONTENT_START));
+
   infoPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>");
   infoPage.concat("<br><div>SSID: " + WiFi.SSID() + "</div>");
   if (digitalRead(RELAY_PIN)) {
@@ -429,22 +430,22 @@ void handleInfo(void) {
   } else {
     infoPage.concat(F("<div>Relay Status: off</div>"));
   }
-  infoPage.concat(WEB_BODY_END);
+  infoPage.concat(FPSTR(WEB_BODY_END));
   // Root web page
   server.send(200, "text/html", infoPage);
 }
 
 void handleConfig(void) {
-  String configPage="";
+  String configPage = "";
 
-  configPage.concat(WEB_HEAD);
-  configPage.concat(WEB_STYLE);
-  configPage.concat(WEB_BODY_START);
-  configPage.concat(WEB_SIDENAV);
-  configPage.concat(WEB_CONTENT_START);
-  
-  configPage.concat(F("<div>config ok</div></div>"));
-  configPage.concat(WEB_BODY_END);
+  configPage.concat(FPSTR(WEB_HEAD));
+  configPage.concat(FPSTR(WEB_STYLE));
+  configPage.concat(FPSTR(WEB_BODY_START));
+  configPage.concat(FPSTR(WEB_SIDENAV));
+  configPage.concat(FPSTR(WEB_CONTENT_START));
+
+  configPage.concat(F("<div>config ok</div>"));
+  configPage.concat(FPSTR(WEB_BODY_END));
   if ((server.hasArg("name1")) && (server.hasArg("name2")) && (server.hasArg("name3")) && (server.hasArg("name4"))) {
     EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, server.arg("name1"));
     EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, server.arg("name2"));

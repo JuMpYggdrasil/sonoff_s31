@@ -2,7 +2,7 @@
 
 #define USE_WiFiManager true
 #define USE_MDNS true
-#define USE_FTP false
+#define USE_FTP true
 #define USE_OTA true//keep true, if possible.
 #define USE_TELNET true
 
@@ -177,6 +177,14 @@ String EEPROM_ReadString(char addr);
 void EEPROM_WriteUInt(char address, unsigned int number);
 unsigned int EEPROM_ReadUInt(char address);
 
+
+const char WEB_HEAD[] PROGMEM = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
+const char WEB_STYLE[] PROGMEM = "<link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\">";
+const char WEB_BODY_START[] PROGMEM = "</head><body>";
+const char WEB_SIDENAV[] PROGMEM = "<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/info\">Info</a><a href=\"/update\">OTA</a></div>";
+const char WEB_CONTENT_START[] PROGMEM = "<div class=\"content\"><h2><span style=\"color: maroon\">I</span>ED</h2>";
+const char WEB_BODY_END[] PROGMEM = "</div></body></html>";
+
 void setup() {
   // Initialize
   cse7766.setRX(1);
@@ -234,8 +242,19 @@ void setup() {
 
   ////==== webpage assign section ====
   server.on("/", HTTP_GET, handleRoot);
+  server.serveStatic("/style.css", SPIFFS, "/style.css");
   server.onNotFound(handleNotFound);
+  server.on("/info", HTTP_GET, handleInfo);
   server.on("/config", HTTP_POST, handleConfig);
+  server.on("/on", HTTP_POST, []() {
+    digitalWrite(RELAY_PIN, HIGH);
+    server.send(204);
+  });
+  server.on("/off", HTTP_POST, []() {
+    digitalWrite(RELAY_PIN, LOW);
+    server.send(204);
+  });
+
 
 #if USE_OTA
   ElegantOTA.begin(&server);    // Start ElegantOTA
@@ -348,7 +367,7 @@ void loop()
 }
 
 void handleRoot(void) {
-  String rootPage;
+  String rootPage = "";
   //authentication
   if (!server.authenticate(www_username, www_password)) {
     return server.requestAuthentication();
@@ -359,46 +378,73 @@ void handleRoot(void) {
   redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
   redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
 
-  rootPage = F("<!DOCTYPE html>");
-  rootPage.concat(F("<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"));
-  rootPage.concat(F("</head><body>"));
-  rootPage.concat(F("<style>"));
-  rootPage.concat(F("body{margin:0;font-family:Arial,Helvetica,sans-serif}.sidenav{height:100%;width:180px;position:fixed;z-index:1;top:0;left:0;background-color:maroon;overflow-x:hidden}.sidenav a{color:#fff;padding:16px;text-decoration:none;display:block}.sidenav a:hover{background-color:#fcc;color:maroon}.content{margin-left:180px;padding:20px}"));
-  rootPage.concat(F("</style>"));
-  rootPage.concat(F("<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/update\">OTA</a></div>"));
-  rootPage.concat(F("<div class=\"content\">"));
-  rootPage.concat(F("<h2><span style=\"color: maroon\">I</span>ED</h2>"));
-  rootPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>");
+  rootPage.concat(WEB_HEAD);
+  rootPage.concat(WEB_STYLE);
+  rootPage.concat(WEB_BODY_START);
+  rootPage.concat(WEB_SIDENAV);
+  rootPage.concat(WEB_CONTENT_START);
+  
+  rootPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div><br>");
   rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
   rootPage.concat(F("<label for=\"name1\">Device key:  </label>"));
-  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"></br>");
+  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"><br>");
   rootPage.concat(F("<label for=\"name2\">Redis addr:  </label>"));
-  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name2\" placeholder=\"" + redis_server_addr + "\"></br>");
+  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name2\" placeholder=\"" + redis_server_addr + "\"><br>");
   rootPage.concat(F("<label for=\"name3\">Redis port:  </label>"));
-  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name3\" placeholder=\"" + String(redis_server_port) + "\"></br>");
+  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name3\" placeholder=\"" + String(redis_server_port) + "\"><br>");
   rootPage.concat(F("<label for=\"name4\">Redis pass:  </label>"));
-  rootPage.concat("<input type=\"password\" style=\"width:70%\" name=\"name4\" placeholder=\"" + redis_server_pass + "\"></br>");
-  rootPage.concat(F("<input type=\"submit\">"));
-  rootPage.concat(F("</form></div>"));
-  rootPage.concat(F("</body></html>"));
+  rootPage.concat("<input type=\"password\" style=\"width:70%\" name=\"name4\" placeholder=\"" + redis_server_pass + "\"><br>");
+  rootPage.concat(F("<input type=\"submit\" value=\"Save\">"));
+  rootPage.concat(F("</form></br>"));
+  rootPage.concat(F("<form action=\"/on\" method=\"POST\">"));
+  rootPage.concat(F("<input type=\"submit\" value=\"relay on\">"));
+  rootPage.concat(F("</form>"));
+  rootPage.concat(F("<form action=\"/off\" method=\"POST\">"));
+  rootPage.concat(F("<input type=\"submit\" value=\"relay off\">"));
+  rootPage.concat(F("</form>"));
+  rootPage.concat(WEB_BODY_END);
   // Root web page
   server.send(200, "text/html", rootPage);
 }
 void handleNotFound() {
   server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
 }
+void handleInfo(void) {
+  String infoPage="";
+  //authentication
+  if (!server.authenticate(www_username, www_password)) {
+    return server.requestAuthentication();
+  }
+
+  infoPage.concat(WEB_HEAD);
+  infoPage.concat(WEB_STYLE);
+  infoPage.concat(WEB_BODY_START);
+  infoPage.concat(WEB_SIDENAV);
+  infoPage.concat(WEB_CONTENT_START);
+  
+  infoPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>");
+  infoPage.concat("<br><div>SSID: " + WiFi.SSID() + "</div>");
+  if (digitalRead(RELAY_PIN)) {
+    infoPage.concat(F("<div>Relay Status: on</div>"));
+  } else {
+    infoPage.concat(F("<div>Relay Status: off</div>"));
+  }
+  infoPage.concat(WEB_BODY_END);
+  // Root web page
+  server.send(200, "text/html", infoPage);
+}
+
 void handleConfig(void) {
-  String configPage;
-  configPage = F("<!DOCTYPE html>");
-  configPage.concat(F("<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"));
-  configPage.concat(F("</head><body><style>"));
-  configPage.concat(F("body{margin:0;font-family:Arial,Helvetica,sans-serif}.sidenav{height:100%;width:180px;position:fixed;z-index:1;top:0;left:0;background-color:maroon;overflow-x:hidden}.sidenav a{color:#fff;padding:16px;text-decoration:none;display:block}.sidenav a:hover{background-color:#fcc;color:maroon}.content{margin-left:180px;padding:20px}"));
-  configPage.concat(F("</style>"));
-  configPage.concat(F("<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/update\">OTA</a></div>"));
-  configPage.concat(F("<div class=\"content\">"));
-  configPage.concat(F("<h2><span style=\"color: maroon\">I</span>ED</h2>"));
+  String configPage="";
+
+  configPage.concat(WEB_HEAD);
+  configPage.concat(WEB_STYLE);
+  configPage.concat(WEB_BODY_START);
+  configPage.concat(WEB_SIDENAV);
+  configPage.concat(WEB_CONTENT_START);
+  
   configPage.concat(F("<div>config ok</div></div>"));
-  configPage.concat(F("</body></html>"));
+  configPage.concat(WEB_BODY_END);
   if ((server.hasArg("name1")) && (server.hasArg("name2")) && (server.hasArg("name3")) && (server.hasArg("name4"))) {
     EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, server.arg("name1"));
     EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, server.arg("name2"));
@@ -424,12 +470,12 @@ void handleConfig(void) {
 void clickbutton_action(void) {
   if (S31_Button.isClick()) {
 #if USE_TELNET
-    debugW("Click");
+    debugD("Click");
 #endif
   }
   if (S31_Button.isSingleClick()) {
 #if USE_TELNET
-    debugI("SingleClick");
+    debugD("SingleClick");
     if (digitalRead(RELAY_PIN)) {
       debugI("status on\n");
     } else {
@@ -499,7 +545,7 @@ void clickbutton_action(void) {
   if (S31_Button.isDoubleClick()) {
     digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
 #if USE_TELNET
-    debugI("DoubleClick");
+    debugD("DoubleClick");
 #endif
   }
   if (S31_Button.isLongClick()) {
@@ -515,7 +561,7 @@ void clickbutton_action(void) {
     redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
 
 #if USE_TELNET
-    debugI("LongClick");
+    debugD("LongClick");
 #endif
 
 #if USE_WiFiManager
@@ -543,6 +589,12 @@ void redisInterface_handle(void) {
   bool redis_bool_result;
 
   if (redisInterface_flag == true) {
+
+    if (redis_server_pass == "") {
+#if USE_TELNET
+      debugW("redis_server_pass == """);
+#endif
+    }
     if (redisInterface_state == 0) {
       if (!redisConn.connect(redis_server_addr.c_str(), redis_server_port))
       {

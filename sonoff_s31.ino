@@ -158,11 +158,12 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
 sllib blue_led(LED_PIN);
 
-int init_pattern[] = {900, 100};
+int init_pattern[] = {1900, 100};
 int normal_pattern[] = {1500, 100, 300, 100};
 int error_pattern[] = {1100, 100, 300, 100, 300, 100};
-//int special_pattern[] = {300,100,300,100,300,900};
-//int wifi_pattern[] = {500,1500};
+int noAuthen_pattern[] = {700, 100, 300, 100, 300, 100, 300, 100};
+int unauthen_pattern[] = {300, 100, 300, 100, 300, 900};
+int waitReset_pattern[] = {50, 50};
 
 //prototype declare
 void clickbutton_action(void);
@@ -188,18 +189,49 @@ const char WEB_BODY_END[] PROGMEM = "</div></body></html>";
 
 void setup() {
   // Initialize
+  ESP.wdtDisable();
+
   cse7766.setRX(1);
   cse7766.begin(); // will initialize serial to 4800 bps
 
   //  pinMode(PUSHBUTTON_PIN, INPUT);
   //  pinMode(LED_PIN, OUTPUT);
   //  digitalWrite(LED_PIN, LOW);
-  blue_led.setOffSingle();//turn on led
+  blue_led.setOffSingle();//turn on blue led
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW);
+  digitalWrite(RELAY_PIN, LOW);//turn off red led
 
   redis_deviceKey.reserve(80);
   redis_server_addr.reserve(30);
+
+  EEPROM.begin(512);
+
+  blue_led.setPatternSingle(waitReset_pattern, 2);
+
+  unsigned long exitTime = millis() + 5000;
+  while (millis() < exitTime) {
+    if (S31_Button.isSingleClick()) {
+      //restore to default
+      EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
+      EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
+      EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, REDIS_PORT);
+      EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
+
+      redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
+      redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+      redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+      redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
+
+#if USE_WiFiManager
+      wm.resetSettings();
+      //ESP.restart();
+#endif
+    }
+    S31_Button.update();
+    blue_led.update();
+  }
+  blue_led.setOffSingle();//turn on blue led
+
 
 #if !USE_MDNS
   WiFi.config(local_IP, primaryDNS, gateway, subnet);
@@ -298,9 +330,7 @@ void setup() {
 #endif
 
   timeClient.begin();
-
-  digitalWrite(RELAY_PIN, HIGH);
-
+ 
 #if USE_TELNET
   /// Debug levels
   debugA("* This is a message of debug level ANY");//always show
@@ -310,8 +340,6 @@ void setup() {
   debugW("* This is a message of debug level WARNING");
   debugE("* This is a message of debug level ERROR");
 #endif
-
-  EEPROM.begin(512);
 
   redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
   redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
@@ -326,7 +354,17 @@ void setup() {
   debugI("redis_server_pass: %s", redis_server_pass.c_str());
 #endif
 
-  blue_led.setPatternSingle(init_pattern, 2);
+  blue_led.setOnSingle();//turn off blue led
+  digitalWrite(RELAY_PIN, HIGH);//turn on red led
+
+#if USE_WiFiManager
+  if (res) {//normal operation
+    blue_led.setPatternSingle(init_pattern, 2);
+  } else {
+    blue_led.setPatternSingle(unauthen_pattern, 6);
+  }
+#endif
+  ESP.wdtEnable(WDTO_8S);
 }
 
 void loop()
@@ -343,8 +381,8 @@ void loop()
 
     redisInterface_flag = true;
   }
-  clickbutton_action();
   cse7766.handle();// CSE7766 handle
+  clickbutton_action();
   S31_Button.update();
   blue_led.update();
   server.handleClient();
@@ -362,6 +400,8 @@ void loop()
 #if USE_TELNET
   Debug.handle();// RemoteDebug handle
 #endif
+
+  ESP.wdtFeed();
 
   // Give a time for ESP
   yield();
@@ -404,7 +444,7 @@ void handleRoot(void) {
   rootPage.concat(F("<input type=\"submit\" value=\"relay off\">"));
   rootPage.concat(F("</form>"));
   rootPage.concat(FPSTR(WEB_BODY_END));
-  
+
   // Root web page
   server.send(200, "text/html", rootPage);
 }
@@ -591,12 +631,6 @@ void redisInterface_handle(void) {
   bool redis_bool_result;
 
   if (redisInterface_flag == true) {
-
-    if (redis_server_pass == "") {
-#if USE_TELNET
-      debugW("redis_server_pass == """);
-#endif
-    }
     if (redisInterface_state == 0) {
       if (!redisConn.connect(redis_server_addr.c_str(), redis_server_port))
       {
@@ -627,9 +661,11 @@ void redisInterface_handle(void) {
           redisInterface_state = 0;
           redisInterface_flag = false;
           redisConn.stop();
-          blue_led.setPatternSingle(error_pattern, 6);
+          blue_led.setPatternSingle(unauthen_pattern, 6);
           return;
         }
+      }else{
+        blue_led.setPatternSingle(noAuthen_pattern, 8);
       }
 
       // Voltage
@@ -644,6 +680,9 @@ void redisInterface_handle(void) {
         debugD("ok!");
       } else {
         debugE("err");
+        if (redis_server_pass == "") {//can connect but auth fail
+          blue_led.setPatternSingle(unauthen_pattern, 6);
+        }
       }
 #if REDIS_GET_TEST
       redis_str_result = redis.get(redis_key.c_str());
@@ -805,7 +844,7 @@ void redisInterface_handle(void) {
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
 #endif
 #endif
-      
+
       redisInterface_state++;
     } else if (redisInterface_state == 3) {
       redisConn.stop();

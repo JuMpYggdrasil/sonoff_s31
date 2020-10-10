@@ -5,6 +5,7 @@
 #define USE_FTP true
 #define USE_OTA true//keep true, if possible.
 #define USE_TELNET true
+#define REDIS_GET_TEST false
 
 #define REDIS_ADDR "siriprapawat.trueddns.com"//"192.168.1.22"
 #define REDIS_PORT 14285//6379
@@ -644,9 +645,10 @@ void redisInterface_handle(void) {
       } else {
         debugE("err");
       }
-
+#if REDIS_GET_TEST
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 #endif
 
       // Current
@@ -662,10 +664,12 @@ void redisInterface_handle(void) {
       } else {
         debugE("err");
       }
-
+#if REDIS_GET_TEST
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
 #endif
+#endif
+
       // ActivePower
       redis_key = redis_deviceKey + String(redis_activepower);
       cse7766_value = String(cse7766.getActivePower());
@@ -679,9 +683,10 @@ void redisInterface_handle(void) {
       } else {
         debugE("err");
       }
-
+#if REDIS_GET_TEST
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 #endif
 
       // ApparentPower
@@ -697,9 +702,10 @@ void redisInterface_handle(void) {
       } else {
         debugE("err");
       }
-
+#if REDIS_GET_TEST
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 #endif
 
       redisInterface_state++;
@@ -737,9 +743,10 @@ void redisInterface_handle(void) {
       } else {
         debugE("err");
       }
+#if REDIS_GET_TEST
       redis_str_result = redis.get(redis_key.c_str());
-
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 #endif
 
       // PowerFactor
@@ -755,8 +762,10 @@ void redisInterface_handle(void) {
       } else {
         debugE("err");
       }
+#if REDIS_GET_TEST
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 #endif
 
       // Energy
@@ -772,9 +781,10 @@ void redisInterface_handle(void) {
       } else {
         debugE("err");
       }
-
+#if REDIS_GET_TEST
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
 #endif
 
       // TimeStamp
@@ -790,11 +800,12 @@ void redisInterface_handle(void) {
       } else {
         debugE("err");
       }
-
+#if REDIS_GET_TEST
       redis_str_result = redis.get(redis_key.c_str());
       debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
 #endif
-
+#endif
+      
       redisInterface_state++;
     } else if (redisInterface_state == 3) {
       redisConn.stop();

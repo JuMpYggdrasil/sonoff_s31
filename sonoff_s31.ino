@@ -124,6 +124,8 @@ const char* redis_powerfactor PROGMEM = REDIS_POWERFACTOR;
 const char* redis_energy PROGMEM = REDIS_ENERGY;
 const char* redis_timestamp PROGMEM = REDIS_TIMESTAMP;
 
+String hostNameWifi;
+
 #if USE_WiFiManager
 WiFiManager wm;
 #endif
@@ -166,13 +168,15 @@ int unauthen_pattern[] = {300, 100, 300, 100, 300, 900};
 int waitReset_pattern[] = {50, 50};
 
 //prototype declare
+void startupConfig(void);
+void startupLog(void);
 void clickbutton_action(void);
 void PowerSensorDisplay(void);
 void redisInterface_handle(void);
 
-void handleRoot();
-void handleNotFound();
-void handleConfig();
+void handleRoot(void);
+void handleNotFound(void);
+void handleConfig(void);
 void handleInfo(void);
 
 void EEPROM_WriteString(char addr, String data);
@@ -185,14 +189,62 @@ const char WEB_STYLE[] PROGMEM = "<link rel=\"stylesheet\" type=\"text/css\" hre
 const char WEB_BODY_START[] PROGMEM = "</head><body>";
 const char WEB_SIDENAV[] PROGMEM = "<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/info\">Info</a><a href=\"/update\">OTA</a></div>";
 const char WEB_CONTENT_START[] PROGMEM = "<div class=\"content\"><h2><span style=\"color: maroon\">I</span>ED</h2>";
-const char WEB_BODY_END[] PROGMEM = "</div></body></html>";
+const char WEB_BODY_HTML_END[] PROGMEM = "</div></body></html>";//with end content
+const char WEB_SCRIPT_START[] PROGMEM = "</div></body><script>";//with end content
+const char WEB_SCRIPT_HTML_END[] PROGMEM = "</script></html>";
+
+void startupConfig(void) {
+  //  //timeClient.update();
+  //  timeClient.forceUpdate();
+  //
+  //  File configFile = SPIFFS.open("/config.txt", "r");
+  //  if (!configFile)
+  //  {
+  //    return;
+  //  }
+  //  while (configFile.available())
+  //  {
+  //    String line = configFile.readStringUntil('\n');
+  //    //      String resultstr;
+  //    //      if (line.startsWith("xxxx")) {
+  //    //        resultstr = line.substring(line.indexOf(",") + 1);
+  //    //        resultstr.trim();
+  //    //        resultstr.toCharArray(XXXX, resultstr.length() + 1);//global char* XXXX = "initial";
+  //    //      } else if (line.startsWith("yyyy")) {
+  //    //        resultstr = line.substring(line.indexOf(",") + 1);
+  //    //        resultstr.trim();
+  //    //        resultstr.toCharArray(YYYY, resultstr.length() + 1);//global char* YYYY = "initial";
+  //    //      }
+  //  }
+  //  configFile.close();
+}
+void startupLog(void) {
+  //timeClient.update();
+  timeClient.forceUpdate();
+  timeClient.forceUpdate();
+
+  //a+ -> Open for reading and appending (writing at end of file).
+  //The file is created if it does not exist.
+  File logFile = SPIFFS.open("/log.txt", "a+");
+  if (!logFile) {
+    return;
+  }
+  if (logFile.size() < 2000) {
+    int bytesWritten = logFile.print(timeClient.getEpochTime());
+    bytesWritten = logFile.print(",");
+    bytesWritten = logFile.println( ESP.getResetReason());
+    //bytesWritten = logFile.println(timeClient.getFormattedTime());
+
+  }
+  logFile.close();
+}
 
 void setup() {
   // Initialize
   ESP.wdtDisable();
 
   cse7766.setRX(1);
-  cse7766.begin(); // will initialize serial to 4800 bps
+  cse7766.begin();// will initialize serial to 4800 bps
 
   //  pinMode(PUSHBUTTON_PIN, INPUT);
   //  pinMode(LED_PIN, OUTPUT);
@@ -205,6 +257,7 @@ void setup() {
   redis_server_addr.reserve(30);
 
   EEPROM.begin(512);
+  timeClient.begin();
 
   blue_led.setPatternSingle(waitReset_pattern, 2);
 
@@ -229,9 +282,9 @@ void setup() {
     }
     S31_Button.update();
     blue_led.update();
+    timeClient.update();
   }
   blue_led.setOffSingle();//turn on blue led
-
 
 #if !USE_MDNS
   WiFi.config(local_IP, primaryDNS, gateway, subnet);
@@ -257,7 +310,7 @@ void setup() {
 #endif
 
   // Register host name in WiFi and mDNS
-  String hostNameWifi = HOST_NAME;
+  hostNameWifi = HOST_NAME;
   hostNameWifi.concat(".local");
 
 #ifdef ESP8266 // Only for it
@@ -276,6 +329,7 @@ void setup() {
   ////==== webpage assign section ====
   server.on("/", HTTP_GET, handleRoot);
   server.serveStatic("/style.css", SPIFFS, "/style.css");
+  server.serveStatic("/log.txt", SPIFFS, "/log.txt");
   server.onNotFound(handleNotFound);
   server.on("/info", HTTP_GET, handleInfo);
   server.on("/config", HTTP_POST, handleConfig);
@@ -287,7 +341,23 @@ void setup() {
     digitalWrite(RELAY_PIN, LOW);
     server.send(204);
   });
+  server.on("/xVal", HTTP_GET, []() {
+    String xValue = "";
+    if (digitalRead(RELAY_PIN)) {
+      xValue.concat("status on");
+    } else {
+      xValue.concat("status off");
+    }
+    xValue.concat("," + String(cse7766.getVoltage()));
+    xValue.concat("," + String(cse7766.getCurrent()));
+    xValue.concat("," + String(cse7766.getActivePower()));
+    xValue.concat("," + String(cse7766.getApparentPower()));
+    xValue.concat("," + String(cse7766.getReactivePower()));
+    xValue.concat("," + String(cse7766.getPowerFactor()));
+    xValue.concat("," + String(cse7766.getEnergy()));
 
+    server.send(200, "text/plain", xValue);
+  });
 
 #if USE_OTA
   ElegantOTA.begin(&server);    // Start ElegantOTA
@@ -295,31 +365,16 @@ void setup() {
 
   server.begin();
 
-  if (SPIFFS.begin()) {
+  bool spiffsResult = SPIFFS.begin();
+  if (spiffsResult) {
 #if USE_FTP
+    /////FTP Setup, ensure SPIFFS is started before ftp;  /////////
     ftpSrv.begin(ftp_user, ftp_password);// Then start FTP server when WiFi connection in On
 #endif
-  }
 
-  File configFile = SPIFFS.open("/config.txt", "r");
-  if (configFile)
-  {
-    while (configFile.available())
-    {
-      String line = configFile.readStringUntil('\n');
-      //      String resultstr;
-      //      if (line.startsWith("xxxx")) {
-      //        resultstr = line.substring(line.indexOf(",") + 1);
-      //        resultstr.trim();
-      //        resultstr.toCharArray(XXXX, resultstr.length() + 1);//global char* XXXX = "initial";
-      //      } else if (line.startsWith("yyyy")) {
-      //        resultstr = line.substring(line.indexOf(",") + 1);
-      //        resultstr.trim();
-      //        resultstr.toCharArray(YYYY, resultstr.length() + 1);//global char* YYYY = "initial";
-      //      }
-    }
+    startupConfig();
+    startupLog();
   }
-  configFile.close();
 
 #if USE_TELNET
   //// Initialize RemoteDebug
@@ -327,11 +382,7 @@ void setup() {
   Debug.setResetCmdEnabled(true); // Enable the reset command
   Debug.showProfiler(true); // Profiler (Good to measure times, to optimize codes)
   Debug.showColors(true); // Colors
-#endif
 
-  timeClient.begin();
- 
-#if USE_TELNET
   /// Debug levels
   debugA("* This is a message of debug level ANY");//always show
   debugV("* This is a message of debug level VERBOSE");
@@ -425,7 +476,7 @@ void handleRoot(void) {
   rootPage.concat(FPSTR(WEB_SIDENAV));
   rootPage.concat(FPSTR(WEB_CONTENT_START));
 
-  rootPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div><br>");
+  rootPage.concat("<div>" + hostNameWifi + " : " + WiFi.localIP().toString() + "</div><br>");
   rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
   rootPage.concat(F("<label for=\"name1\">Device key:  </label>"));
   rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"><br>");
@@ -443,13 +494,28 @@ void handleRoot(void) {
   rootPage.concat(F("<form action=\"/off\" method=\"POST\">"));
   rootPage.concat(F("<input type=\"submit\" value=\"relay off\">"));
   rootPage.concat(F("</form>"));
-  rootPage.concat(FPSTR(WEB_BODY_END));
+  rootPage.concat(F("<div id='x0Val'></div>"));
+  rootPage.concat(F("<div id='x1Val'></div>"));
+  rootPage.concat(FPSTR(WEB_SCRIPT_START));
+  rootPage.concat("setInterval(function xmlDataRequest(){");
+  rootPage.concat("var xhttp = new XMLHttpRequest();");
+  rootPage.concat("xhttp.onreadystatechange = function() {");
+  rootPage.concat("if (this.readyState == 4 && this.status == 200) {");
+  rootPage.concat("var resultText = this.responseText.split(',');");
+  rootPage.concat("document.getElementById('x0Val').innerHTML = resultText[0];");
+  rootPage.concat("document.getElementById('x1Val').innerHTML = resultText[1];}");
+  rootPage.concat("};");//function()
+  rootPage.concat("xhttp.open('GET', '/xVal', true);");
+  rootPage.concat("xhttp.send();");
+  rootPage.concat("}, 2000 ) ; ");
+  rootPage.concat(FPSTR(WEB_SCRIPT_HTML_END));
+  //rootPage.concat(FPSTR(WEB_BODY_HTML_END));
 
   // Root web page
-  server.send(200, "text/html", rootPage);
+  server.send(200, "text / html", rootPage);
 }
 void handleNotFound() {
-  server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
+  server.send(404, "text / plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
 }
 void handleInfo(void) {
   String infoPage = "";
@@ -464,15 +530,65 @@ void handleInfo(void) {
   infoPage.concat(FPSTR(WEB_SIDENAV));
   infoPage.concat(FPSTR(WEB_CONTENT_START));
 
-  infoPage.concat("<div>To upload \"http://" + WiFi.localIP().toString() + "/update\"</div></br>");
-  infoPage.concat("<br><div>SSID: " + WiFi.SSID() + "</div>");
+  infoPage.concat(F("<div style=\"font-weight:bold\">Network</div>"));
+  infoPage.concat("<div>IP: " + WiFi.localIP().toString() + "</div>");
+  infoPage.concat("<div>SSID: " + WiFi.SSID() + "</div>");
+
+  infoPage.concat(F("<br><div style=\"font-weight:bold\">Hardware</div>"));
   if (digitalRead(RELAY_PIN)) {
     infoPage.concat(F("<div>Relay Status: on</div>"));
   } else {
     infoPage.concat(F("<div>Relay Status: off</div>"));
   }
-  infoPage.concat(FPSTR(WEB_BODY_END));
-  // Root web page
+  infoPage.concat("<div>Voltage: " + String(cse7766.getVoltage()) + "</div>");
+  infoPage.concat("<div>Current: " + String(cse7766.getCurrent()) + "</div>");
+  infoPage.concat("<div>ActivePower: " + String(cse7766.getActivePower()) + "</div>");
+  infoPage.concat("<div>ApparentPower: " + String(cse7766.getApparentPower()) + "</div>");
+  infoPage.concat("<div>ReactivePower: " + String(cse7766.getReactivePower()) + "</div>");
+  infoPage.concat("<div>PowerFactor: " + String(cse7766.getPowerFactor()) + "</div>");
+  infoPage.concat("<div>Energy: " + String(cse7766.getEnergy()) + "</div>");
+  infoPage.concat(F("<div id='x0Val'></div>"));
+  infoPage.concat(F("<div id='x1Val'></div>"));
+  infoPage.concat(F("<div id='x2Val'></div>"));
+  infoPage.concat(F("<div id='x3Val'></div>"));
+  infoPage.concat(F("<div id='x4Val'></div>"));
+  infoPage.concat(F("<div id='x5Val'></div>"));
+  infoPage.concat(F("<div id='x6Val'></div>"));
+  infoPage.concat(F("<div id='x7Val'></div>"));
+
+  FSInfo fs_info;
+  SPIFFS.info(fs_info);
+
+  infoPage.concat(F("<br><div style=\"font-weight:bold\">Filesystem information</div>"));
+  infoPage.concat("<div>totalBytes " + String(fs_info.totalBytes) + "</div>");
+  infoPage.concat("<div>usedBytes " + String(fs_info.usedBytes) + "</div>");
+
+  Dir dir = SPIFFS.openDir ("");
+  while (dir.next ()) {
+    infoPage.concat("<div>" + String(dir.fileName ()) + "," + dir.fileSize () + "</div>");
+  }
+
+  infoPage.concat(FPSTR(WEB_SCRIPT_START));
+  infoPage.concat("setInterval(function xmlDataRequest(){");
+  infoPage.concat("var xhttp = new XMLHttpRequest();");
+  infoPage.concat("xhttp.onreadystatechange = function() {");
+  infoPage.concat("if (this.readyState == 4 && this.status == 200) {");
+  infoPage.concat("var resultText = this.responseText.split(',');");
+  infoPage.concat("document.getElementById('x0Val').innerHTML = resultText[0];");
+  infoPage.concat("document.getElementById('x1Val').innerHTML = resultText[1];");
+  infoPage.concat("document.getElementById('x2Val').innerHTML = resultText[2];");
+  infoPage.concat("document.getElementById('x3Val').innerHTML = resultText[3];");
+  infoPage.concat("document.getElementById('x4Val').innerHTML = resultText[4];");
+  infoPage.concat("document.getElementById('x5Val').innerHTML = resultText[5];");
+  infoPage.concat("document.getElementById('x6Val').innerHTML = resultText[6];");
+  infoPage.concat("document.getElementById('x7Val').innerHTML = resultText[7];}");
+  infoPage.concat("};");//function()
+  infoPage.concat("xhttp.open('GET', '/xVal', true);");
+  infoPage.concat("xhttp.send();");
+  infoPage.concat("}, 2000 ) ; ");
+  infoPage.concat(FPSTR(WEB_SCRIPT_HTML_END));
+  //infoPage.concat(FPSTR(WEB_BODY_HTML_END));
+  // Info web page
   server.send(200, "text/html", infoPage);
 }
 
@@ -486,7 +602,7 @@ void handleConfig(void) {
   configPage.concat(FPSTR(WEB_CONTENT_START));
 
   configPage.concat(F("<div>config ok</div>"));
-  configPage.concat(FPSTR(WEB_BODY_END));
+  configPage.concat(FPSTR(WEB_BODY_HTML_END));
   if ((server.hasArg("name1")) && (server.hasArg("name2")) && (server.hasArg("name3")) && (server.hasArg("name4"))) {
     EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, server.arg("name1"));
     EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, server.arg("name2"));
@@ -631,7 +747,7 @@ void redisInterface_handle(void) {
   bool redis_bool_result;
 
   if (redisInterface_flag == true) {
-    if (redisInterface_state == 0) {
+    if (redisInterface_state == 0) {//WIFI CLIENT
       if (!redisConn.connect(redis_server_addr.c_str(), redis_server_port))
       {
 #if USE_TELNET
@@ -664,7 +780,7 @@ void redisInterface_handle(void) {
           blue_led.setPatternSingle(unauthen_pattern, 6);
           return;
         }
-      }else{
+      } else {
         blue_led.setPatternSingle(noAuthen_pattern, 8);
       }
 

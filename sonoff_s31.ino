@@ -341,12 +341,12 @@ void setup() {
     digitalWrite(RELAY_PIN, LOW);
     server.send(204);
   });
-  server.on("/xVal", HTTP_GET, []() {
+  server.on("/xVal", HTTP_GET, []() {//using AJAX
     String xValue = "";
     if (digitalRead(RELAY_PIN)) {
-      xValue.concat("status on");
+      xValue.concat("on");
     } else {
-      xValue.concat("status off");
+      xValue.concat("off");
     }
     xValue.concat("," + String(cse7766.getVoltage()));
     xValue.concat("," + String(cse7766.getCurrent()));
@@ -535,26 +535,14 @@ void handleInfo(void) {
   infoPage.concat("<div>SSID: " + WiFi.SSID() + "</div>");
 
   infoPage.concat(F("<br><div style=\"font-weight:bold\">Hardware</div>"));
-  if (digitalRead(RELAY_PIN)) {
-    infoPage.concat(F("<div>Relay Status: on</div>"));
-  } else {
-    infoPage.concat(F("<div>Relay Status: off</div>"));
-  }
-  infoPage.concat("<div>Voltage: " + String(cse7766.getVoltage()) + "</div>");
-  infoPage.concat("<div>Current: " + String(cse7766.getCurrent()) + "</div>");
-  infoPage.concat("<div>ActivePower: " + String(cse7766.getActivePower()) + "</div>");
-  infoPage.concat("<div>ApparentPower: " + String(cse7766.getApparentPower()) + "</div>");
-  infoPage.concat("<div>ReactivePower: " + String(cse7766.getReactivePower()) + "</div>");
-  infoPage.concat("<div>PowerFactor: " + String(cse7766.getPowerFactor()) + "</div>");
-  infoPage.concat("<div>Energy: " + String(cse7766.getEnergy()) + "</div>");
-  infoPage.concat(F("<div id='x0Val'></div>"));
-  infoPage.concat(F("<div id='x1Val'></div>"));
-  infoPage.concat(F("<div id='x2Val'></div>"));
-  infoPage.concat(F("<div id='x3Val'></div>"));
-  infoPage.concat(F("<div id='x4Val'></div>"));
-  infoPage.concat(F("<div id='x5Val'></div>"));
-  infoPage.concat(F("<div id='x6Val'></div>"));
-  infoPage.concat(F("<div id='x7Val'></div>"));
+  infoPage.concat(F("<div>Relay Status: <span id='x0Val'></span></div>"));
+  infoPage.concat(F("<div>Voltage: <span id='x1Val'></span></div>"));
+  infoPage.concat(F("<div>Current: <span id='x2Val'></span></div>"));
+  infoPage.concat(F("<div>ActivePower: <span id='x3Val'></span></div>"));
+  infoPage.concat(F("<div>ApparentPower: <span id='x4Val'></span></div>"));
+  infoPage.concat(F("<div>ReactivePower: <span id='x5Val'></span></div>"));
+  infoPage.concat(F("<div>PowerFactor: <span id='x6Val'></span></div>"));
+  infoPage.concat(F("<div>Energy: <span id='x7Val'></span></div>"));
 
   FSInfo fs_info;
   SPIFFS.info(fs_info);

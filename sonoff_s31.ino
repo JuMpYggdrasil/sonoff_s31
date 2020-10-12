@@ -478,14 +478,14 @@ void handleRoot(void) {
 
   rootPage.concat("<div>" + hostNameWifi + " : " + WiFi.localIP().toString() + "</div><br>");
   rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
-  rootPage.concat(F("<label for=\"name1\">Device key:  </label>"));
-  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"><br>");
-  rootPage.concat(F("<label for=\"name2\">Redis addr:  </label>"));
-  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name2\" placeholder=\"" + redis_server_addr + "\"><br>");
-  rootPage.concat(F("<label for=\"name3\">Redis port:  </label>"));
-  rootPage.concat("<input type=\"text\" style=\"width:70%\" name=\"name3\" placeholder=\"" + String(redis_server_port) + "\"><br>");
-  rootPage.concat(F("<label for=\"name4\">Redis pass:  </label>"));
-  rootPage.concat("<input type=\"password\" style=\"width:70%\" name=\"name4\" placeholder=\"" + redis_server_pass + "\"><br>");
+  rootPage.concat(F("<label for=\"name1\">Device key:  </label><br>"));
+  rootPage.concat("<input type=\"text\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"><br>");
+  rootPage.concat(F("<label for=\"name2\">Redis addr:  </label><br>"));
+  rootPage.concat("<input type=\"text\" name=\"name2\" placeholder=\"" + redis_server_addr + "\"><br>");
+  rootPage.concat(F("<label for=\"name3\">Redis port:  </label><br>"));
+  rootPage.concat("<input type=\"text\" name=\"name3\" placeholder=\"" + String(redis_server_port) + "\"><br>");
+  rootPage.concat(F("<label for=\"name4\">Redis pass:  </label><br>"));
+  rootPage.concat("<input type=\"password\" name=\"name4\" placeholder=\"" + redis_server_pass + "\"><br>");
   rootPage.concat(F("<input type=\"submit\" value=\"Save\">"));
   rootPage.concat(F("</form></br>"));
   rootPage.concat(F("<form action=\"/on\" method=\"POST\">"));

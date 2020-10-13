@@ -178,6 +178,7 @@ void handleRoot(void);
 void handleNotFound(void);
 void handleConfig(void);
 void handleInfo(void);
+void handleGraph(void);
 
 void EEPROM_WriteString(char addr, String data);
 String EEPROM_ReadString(char addr);
@@ -194,51 +195,7 @@ const char WEB_BODY_HTML_END[] PROGMEM = "</div></body></html>";//with end conte
 const char WEB_SCRIPT_START[] PROGMEM = "</div></body><script>";//with end content
 const char WEB_SCRIPT_HTML_END[] PROGMEM = "</script></html>";
 
-void startupConfig(void) {
-  //  //timeClient.update();
-  //  timeClient.forceUpdate();
-  //
-  //  File configFile = SPIFFS.open("/config.txt", "r");
-  //  if (!configFile)
-  //  {
-  //    return;
-  //  }
-  //  while (configFile.available())
-  //  {
-  //    String line = configFile.readStringUntil('\n');
-  //    //      String resultstr;
-  //    //      if (line.startsWith("xxxx")) {
-  //    //        resultstr = line.substring(line.indexOf(",") + 1);
-  //    //        resultstr.trim();
-  //    //        resultstr.toCharArray(XXXX, resultstr.length() + 1);//global char* XXXX = "initial";
-  //    //      } else if (line.startsWith("yyyy")) {
-  //    //        resultstr = line.substring(line.indexOf(",") + 1);
-  //    //        resultstr.trim();
-  //    //        resultstr.toCharArray(YYYY, resultstr.length() + 1);//global char* YYYY = "initial";
-  //    //      }
-  //  }
-  //  configFile.close();
-}
-void startupLog(void) {
-  //timeClient.update();
-  timeClient.forceUpdate();
-  timeClient.forceUpdate();
 
-  //a+ -> Open for reading and appending (writing at end of file).
-  //The file is created if it does not exist.
-  File logFile = SPIFFS.open("/log.txt", "a+");
-  if (!logFile) {
-    return;
-  }
-  if (logFile.size() < 2000) {
-    int bytesWritten = logFile.print(timeClient.getEpochTime());
-    bytesWritten = logFile.print(",");
-    bytesWritten = logFile.println( ESP.getResetReason());
-    //bytesWritten = logFile.println(timeClient.getFormattedTime());
-
-  }
-  logFile.close();
-}
 
 void setup() {
   // Initialize
@@ -763,7 +720,51 @@ void PowerSensorDisplay(void) {
   debugV("Energy %.4f Ws\n", cse7766.getEnergy());
 #endif
 }
+void startupConfig(void) {
+  //  //timeClient.update();
+  //  timeClient.forceUpdate();
+  //
+  //  File configFile = SPIFFS.open("/config.txt", "r");
+  //  if (!configFile)
+  //  {
+  //    return;
+  //  }
+  //  while (configFile.available())
+  //  {
+  //    String line = configFile.readStringUntil('\n');
+  //    //      String resultstr;
+  //    //      if (line.startsWith("xxxx")) {
+  //    //        resultstr = line.substring(line.indexOf(",") + 1);
+  //    //        resultstr.trim();
+  //    //        resultstr.toCharArray(XXXX, resultstr.length() + 1);//global char* XXXX = "initial";
+  //    //      } else if (line.startsWith("yyyy")) {
+  //    //        resultstr = line.substring(line.indexOf(",") + 1);
+  //    //        resultstr.trim();
+  //    //        resultstr.toCharArray(YYYY, resultstr.length() + 1);//global char* YYYY = "initial";
+  //    //      }
+  //  }
+  //  configFile.close();
+}
+void startupLog(void) {
+  //timeClient.update();
+  timeClient.forceUpdate();
+  timeClient.forceUpdate();
 
+  //a+ -> Open for reading and appending (writing at end of file).
+  //The file is created if it does not exist.
+  File logFile = SPIFFS.open("/log.txt", "a+");
+  if (!logFile) {
+    return;
+  }
+  if (logFile.size() < 2000) {
+    int bytesWritten = logFile.print(timeClient.getEpochTime());
+    bytesWritten = logFile.print(",");
+    bytesWritten = logFile.println( ESP.getResetReason());
+    //bytesWritten = logFile.println(timeClient.getFormattedTime());
+
+  }
+  logFile.close();
+}
 void redisInterface_handle(void) {
   String redis_key;
   String cse7766_value;

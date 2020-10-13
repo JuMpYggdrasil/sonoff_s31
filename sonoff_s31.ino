@@ -185,9 +185,10 @@ void EEPROM_WriteUInt(char address, unsigned int number);
 unsigned int EEPROM_ReadUInt(char address);
 
 const char WEB_HEAD[] PROGMEM = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
+const char WEB_LOAD_SCRIPT[] PROGMEM = "<script src=\"highcharts.js\"></script>";
 const char WEB_STYLE[] PROGMEM = "<link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\">";
 const char WEB_BODY_START[] PROGMEM = "</head><body>";
-const char WEB_SIDENAV[] PROGMEM = "<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/info\">Info</a><a href=\"/update\">OTA</a></div>";
+const char WEB_SIDENAV[] PROGMEM = "<div class=\"sidenav\"><a href=\"/\">Home</a><a href=\"/info\">Info</a><a href=\"/graph\">Graph</a><a href=\"/update\">OTA</a></div>";
 const char WEB_CONTENT_START[] PROGMEM = "<div class=\"content\"><h2><span style=\"color: maroon\">I</span>ED</h2>";
 const char WEB_BODY_HTML_END[] PROGMEM = "</div></body></html>";//with end content
 const char WEB_SCRIPT_START[] PROGMEM = "</div></body><script>";//with end content
@@ -327,11 +328,17 @@ void setup() {
 #endif
 
   ////==== webpage assign section ====
+  ///===== -client web access  =======
   server.on("/", HTTP_GET, handleRoot);
+  server.on("/info", HTTP_GET, handleInfo);
+  server.on("/graph", HTTP_GET, handleGraph);
+  server.onNotFound(handleNotFound);
+  ///===== -spiffs file support  =====
   server.serveStatic("/style.css", SPIFFS, "/style.css");
   server.serveStatic("/log.txt", SPIFFS, "/log.txt");
-  server.onNotFound(handleNotFound);
-  server.on("/info", HTTP_GET, handleInfo);
+  server.serveStatic("/test.html", SPIFFS, "/test.html");
+  server.serveStatic("/highcharts.js", SPIFFS, "/highcharts.js");
+  ///===== -http post  ===============
   server.on("/config", HTTP_POST, handleConfig);
   server.on("/on", HTTP_POST, []() {
     digitalWrite(RELAY_PIN, HIGH);
@@ -341,6 +348,7 @@ void setup() {
     digitalWrite(RELAY_PIN, LOW);
     server.send(204);
   });
+  ///===== -ajax xmlHttpRequest  ===============
   server.on("/xVal", HTTP_GET, []() {//using AJAX
     String xValue = "";
     if (digitalRead(RELAY_PIN)) {
@@ -355,8 +363,10 @@ void setup() {
     xValue.concat("," + String(cse7766.getReactivePower()));
     xValue.concat("," + String(cse7766.getPowerFactor()));
     xValue.concat("," + String(cse7766.getEnergy()));
+    xValue.concat("," + String(WiFi.SSID())+" "+ String(WiFi.RSSI()));
+    xValue.concat("," + String(WiFi.SSID(1))+" "+ String(WiFi.RSSI(1)));
 
-    server.send(200, "text/plain", xValue);
+    server.send(200, "text/plain", xValue);//(comma format)
   });
 
 #if USE_OTA
@@ -502,8 +512,8 @@ void handleRoot(void) {
   rootPage.concat("xhttp.onreadystatechange = function() {");
   rootPage.concat("if (this.readyState == 4 && this.status == 200) {");
   rootPage.concat("var resultText = this.responseText.split(',');");
-  rootPage.concat("document.getElementById('x0Val').innerHTML = resultText[0];");
-  rootPage.concat("document.getElementById('x1Val').innerHTML = resultText[1];}");
+  rootPage.concat("document.getElementById('x0Val').innerHTML = resultText[8];");
+  rootPage.concat("document.getElementById('x1Val').innerHTML = resultText[9];}");
   rootPage.concat("};");//function()
   rootPage.concat("xhttp.open('GET', '/xVal', true);");
   rootPage.concat("xhttp.send();");
@@ -611,6 +621,32 @@ void handleConfig(void) {
     debugE("config error");
 #endif
   }
+}
+
+void handleGraph(void) {
+  String graphPage = "";
+  //authentication
+  if (!server.authenticate(www_username, www_password)) {
+    return server.requestAuthentication();
+  }
+
+  graphPage.concat(FPSTR(WEB_HEAD));
+  graphPage.concat(FPSTR(WEB_LOAD_SCRIPT));
+  graphPage.concat(FPSTR(WEB_STYLE));
+  graphPage.concat(FPSTR(WEB_BODY_START));
+  graphPage.concat(FPSTR(WEB_SIDENAV));
+  graphPage.concat(FPSTR(WEB_CONTENT_START));
+
+  graphPage.concat(F("<div id=\"chart-temperature\" class=\"container\"></div>"));
+
+  graphPage.concat(FPSTR(WEB_SCRIPT_START));
+
+  graphPage.concat("var chartT=new Highcharts.Chart({chart:{renderTo:\"chart-temperature\"},title:{text:\"CSE7766 Power\"},series:[{showInLegend:!1,data:[]}],plotOptions:{line:{animation:!1,dataLabels:{enabled:!0}},series:{color:\"#059e8a\"}},xAxis:{type:\"datetime\",dateTimeLabelFormats:{second:\"%H:%M:%S\"}},yAxis:{title:{text:\"Power (watt)\"}},credits:{enabled:!1}});setInterval(function(){var e=new XMLHttpRequest;e.onreadystatechange=function(){if(4==this.readyState&&200==this.status){var e=this.responseText.split(\",\"),t=(new Date).getTime(),a=parseFloat(e[3]);chartT.series[0].data.length>60?chartT.series[0].addPoint([t,a],!0,!0,!0):chartT.series[0].addPoint([t,a],!0,!1,!0)}},e.open(\"GET\",\"/xVal\",!0),e.send()},1e3);");
+
+  graphPage.concat(FPSTR(WEB_SCRIPT_HTML_END));
+  //graphPage.concat(FPSTR(WEB_BODY_HTML_END));
+  // Info web page
+  server.send(200, "text/html", graphPage);
 }
 
 void clickbutton_action(void) {

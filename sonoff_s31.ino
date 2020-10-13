@@ -320,8 +320,8 @@ void setup() {
     xValue.concat("," + String(cse7766.getReactivePower()));
     xValue.concat("," + String(cse7766.getPowerFactor()));
     xValue.concat("," + String(cse7766.getEnergy()));
-    xValue.concat("," + String(WiFi.SSID())+" "+ String(WiFi.RSSI()));
-    xValue.concat("," + String(WiFi.SSID(1))+" "+ String(WiFi.RSSI(1)));
+    xValue.concat("," + String(WiFi.SSID()) + " " + String(WiFi.RSSI()));
+    xValue.concat("," + String(WiFi.SSID(1)) + " " + String(WiFi.RSSI(1)));
 
     server.send(200, "text/plain", xValue);//(comma format)
   });

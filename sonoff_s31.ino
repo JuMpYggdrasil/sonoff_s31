@@ -320,9 +320,22 @@ void setup() {
     xValue.concat("," + String(cse7766.getReactivePower()));
     xValue.concat("," + String(cse7766.getPowerFactor()));
     xValue.concat("," + String(cse7766.getEnergy()));
-    xValue.concat("," + String(WiFi.SSID())+" "+ String(WiFi.RSSI()));
-    xValue.concat("," + String(WiFi.SSID(1))+" "+ String(WiFi.RSSI(1)));
+    xValue.concat("," + WiFi.SSID() + " " + String(WiFi.RSSI()));
 
+    int n = WiFi.scanNetworks();
+    String ssni = ",";
+    for (int i = 0; i < n; i++)
+    {
+      if (WiFi.SSID(i).startsWith("ESP")) {
+        ssni.concat(WiFi.SSID(i) + " " + String(WiFi.RSSI(i)) + "  ");
+        //ssni.concat(WiFi.SSID(i) + " " + String(calculateDistance(WiFi.RSSI(i))) + "  ");
+      }
+      if (WiFi.SSID(i) == "JUMP") {
+        ssni.concat(WiFi.SSID(i) + " " + String(WiFi.RSSI(i)) + "  ");
+        //ssni.concat(WiFi.SSID(i) + " " + String(calculateDistance(WiFi.RSSI(i))) + "  ");
+      }
+    }
+    xValue.concat(ssni);
     server.send(200, "text/plain", xValue);//(comma format)
   });
 
@@ -500,6 +513,7 @@ void handleInfo(void) {
   infoPage.concat(F("<div style=\"font-weight:bold\">Network</div>"));
   infoPage.concat("<div>IP: " + WiFi.localIP().toString() + "</div>");
   infoPage.concat("<div>SSID: " + WiFi.SSID() + "</div>");
+  infoPage.concat("<div>RSSI: " + String(WiFi.RSSI()) + "</div>");
 
   infoPage.concat(F("<br><div style=\"font-weight:bold\">Hardware</div>"));
   infoPage.concat(F("<div>Relay Status: <span id='x0Val'></span></div>"));
@@ -1042,4 +1056,13 @@ void EEPROM_WriteUInt(char address, unsigned int number)
 unsigned int EEPROM_ReadUInt(char address)
 {
   return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
+}
+float calculateDistance(int rssi) {
+  if (rssi == 0) {
+    return -1.0;
+  }
+
+  float pl = (rssi + 2.031862) / (-3.9955);
+  float distance =  pow( 10, pl);
+  return distance;
 }

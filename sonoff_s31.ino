@@ -86,8 +86,10 @@
 #include "CSE7766.h"//ingeniuske custom-modified
 #include <PinButton.h>//Martin Poelstra v1.0.0
 #include <EEPROM.h>
-#include <singleLEDLibrary.h>//Pim Ostendorf v1.0.0
+#include <singleLEDLibrary.h>//SethSenpai v1.0.0
 #include <FS.h>
+
+#include <movingAvg.h>// https://github.com/JChristensen/movingAvg
 
 #else
 #error "The board must be ESP8266"
@@ -160,6 +162,8 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
 sllib blue_led(LED_PIN);
 
+movingAvg ma_value(10);
+
 int init_pattern[] = {1900, 100};
 int normal_pattern[] = {1500, 100, 300, 100};
 int error_pattern[] = {1100, 100, 300, 100, 300, 100};
@@ -216,6 +220,7 @@ void setup() {
 
   EEPROM.begin(512);
   timeClient.begin();
+  ma_value.begin();
 
   blue_led.setPatternSingle(waitReset_pattern, 2);
 
@@ -320,8 +325,10 @@ void setup() {
     xValue.concat("," + String(cse7766.getReactivePower()));
     xValue.concat("," + String(cse7766.getPowerFactor()));
     xValue.concat("," + String(cse7766.getEnergy()));
+    
+    int avg = ma_value.reading(WiFi.RSSI());
     xValue.concat("," + String(WiFi.SSID()) + " " + String(WiFi.RSSI()));
-    xValue.concat("," + String(WiFi.SSID(1)) + " " + String(WiFi.RSSI(1)));
+    xValue.concat("," + String(WiFi.SSID()) + " " + String(avg));
 
     server.send(200, "text/plain", xValue);//(comma format)
   });

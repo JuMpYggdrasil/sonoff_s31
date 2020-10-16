@@ -413,15 +413,7 @@ void setup() {
   blue_led.setOnSingle();//turn off blue led
   digitalWrite(RELAY_PIN, HIGH);//turn on red led
 
-#if USE_WiFiManager
-  if (res) {//normal operation
-    blue_led.setPatternSingle(init_pattern, 2);
-  } else {
-    blue_led.setPatternSingle(unauthen_pattern, 6);
-  }
-#else
   blue_led.setPatternSingle(init_pattern, 2);
-#endif
   ESP.wdtEnable(WDTO_8S);
 }
 

@@ -10,12 +10,15 @@
 #define REDIS_ADDR "siriprapawat.trueddns.com"//"192.168.1.22"
 #define REDIS_PORT 14285//6379
 #define REDIS_PASS "61850"
+#define REDIS_PERIOD_NORM 1//send every sec if connected
+#define REDIS_PERIOD_FAIL 20//try every 20 sec if fail
 
 #define REDIS_EEPROM_ADDR_BEGIN 0//address of REDIS_DEVKEY
 #define REDIS_EEPROM_SERVER_ADDR 100
 #define REDIS_EEPROM_SERVER_PORT 130
 #define REDIS_EEPROM_SERVER_PASS 132
-//#define REDIS_EEPROM_SERVER_xx 140
+//#define REDIS_EEPROM_SERVER_xx 150
+#define EEPROM_INIT 501
 
 #define REDIS_DEVKEY "ACBUSx220xengMMTR1/MMXU1$MX$"
 #define REDIS_VOLTAGE "PhV$mag$f"
@@ -60,6 +63,7 @@
 
 #if USE_WiFiManager
 #include <WiFiManager.h>//tzapu v2.0.3-alpha
+#include <Ticker.h>//for LED status
 #endif
 
 #if USE_MDNS
@@ -88,8 +92,6 @@
 #include <EEPROM.h>
 #include <singleLEDLibrary.h>//SethSenpai v1.0.0
 #include <FS.h>
-
-#include <movingAvg.h>// https://github.com/JChristensen/movingAvg
 
 #else
 #error "The board must be ESP8266"
@@ -130,6 +132,8 @@ String hostNameWifi;
 
 #if USE_WiFiManager
 WiFiManager wm;
+bool wm_reset_flag = false;
+Ticker ticker;
 #endif
 
 #if !USE_MDNS
@@ -153,6 +157,7 @@ uint32_t mTimeSeconds = 0;
 
 bool redisInterface_flag = false;
 int redisInterface_state = 0;
+int redisPeriod = REDIS_PERIOD_NORM;
 
 CSE7766 cse7766;
 PinButton S31_Button(PUSHBUTTON_PIN);
@@ -162,14 +167,12 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
 sllib blue_led(LED_PIN);
 
-movingAvg ma_value(10);
-
 int init_pattern[] = {1900, 100};
 int normal_pattern[] = {1500, 100, 300, 100};
 int error_pattern[] = {1100, 100, 300, 100, 300, 100};
 int noAuthen_pattern[] = {700, 100, 300, 100, 300, 100, 300, 100};
 int unauthen_pattern[] = {300, 100, 300, 100, 300, 900};
-int waitReset_pattern[] = {50, 50};
+int waitReset_pattern[] = {100, 100,100, 200};
 
 //prototype declare
 void startupConfig(void);
@@ -177,7 +180,7 @@ void startupLog(void);
 void clickbutton_action(void);
 void PowerSensorDisplay(void);
 void redisInterface_handle(void);
-float calculateDistance(int rssi);
+//float calculateDistance(int rssi);
 
 void handleRoot(void);
 void handleNotFound(void);
@@ -200,8 +203,6 @@ const char WEB_BODY_HTML_END[] PROGMEM = "</div></body></html>";//with end conte
 const char WEB_SCRIPT_START[] PROGMEM = "</div></body><script>";//with end content
 const char WEB_SCRIPT_HTML_END[] PROGMEM = "</script></html>";
 
-
-
 void setup() {
   // Initialize
   ESP.wdtDisable();
@@ -218,14 +219,25 @@ void setup() {
 
   redis_deviceKey.reserve(80);
   redis_server_addr.reserve(30);
+  redis_server_pass.reserve(19);
 
   EEPROM.begin(512);
-  timeClient.begin();
-  ma_value.begin();
-  
-  blue_led.setPatternSingle(waitReset_pattern, 2);
 
-  unsigned long exitTime = millis() + 5000;
+  if (EEPROM.read(EEPROM_INIT) != 1) {
+    EEPROM.write(EEPROM_INIT, 1);
+    delay(1);
+    EEPROM.commit();
+    delay(1);
+
+    EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
+    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
+    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, REDIS_PORT);
+    EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
+  }
+
+  blue_led.setPatternSingle(waitReset_pattern, 4);
+
+  unsigned long exitTime = millis() + 6000;
   while (millis() < exitTime) {
     if (S31_Button.isSingleClick()) {
       //restore to default
@@ -240,13 +252,11 @@ void setup() {
       redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
 
 #if USE_WiFiManager
-      wm.resetSettings();
-      //ESP.restart();
+      wm_reset_flag = true;
 #endif
     }
     S31_Button.update();
     blue_led.update();
-    timeClient.update();
   }
   blue_led.setOffSingle();//turn on blue led
 
@@ -260,10 +270,16 @@ void setup() {
 #if USE_WiFiManager
   //sets timeout for which to attempt connecting, useful if you get a lot of failed connects
   //wm.setConnectTimeout(20);     // how long to try to connect for before continuing
-  // ConnectTimeout calback???? default 10 sec
 
+  wm.setAPCallback(configModeCallback);
+  wm.setConfigPortalTimeout(300);
   wm.setDebugOutput(false);
   bool res = wm.autoConnect();    // password protected ap
+  if (!res) {
+    ESP.reset();
+    delay(1000);
+  }
+  ticker.detach();  
 #else
   WiFi.begin(ssid, password);
   // Wait for connection
@@ -272,6 +288,8 @@ void setup() {
     yield();
   }
 #endif
+
+  
 
   // Register host name in WiFi and mDNS
   hostNameWifi = HOST_NAME;
@@ -326,8 +344,7 @@ void setup() {
     xValue.concat("," + String(cse7766.getReactivePower()));
     xValue.concat("," + String(cse7766.getPowerFactor()));
     xValue.concat("," + String(cse7766.getEnergy()));
-    int avg = ma_value.reading(WiFi.RSSI());
-    xValue.concat("," + WiFi.SSID() + " " + String(avg));
+    xValue.concat("," + WiFi.SSID() + " " + String(WiFi.RSSI()));
 
     int n = WiFi.scanNetworks();
     String ssni = ",";
@@ -351,6 +368,7 @@ void setup() {
 #endif
 
   server.begin();
+  timeClient.begin();
 
   bool spiffsResult = SPIFFS.begin();
   if (spiffsResult) {
@@ -359,7 +377,7 @@ void setup() {
     ftpSrv.begin(ftp_user, ftp_password);// Then start FTP server when WiFi connection in On
 #endif
 
-    startupConfig();
+    //startupConfig();
     startupLog();
   }
 
@@ -401,6 +419,8 @@ void setup() {
   } else {
     blue_led.setPatternSingle(unauthen_pattern, 6);
   }
+#else
+  blue_led.setPatternSingle(init_pattern, 2);
 #endif
   ESP.wdtEnable(WDTO_8S);
 }
@@ -417,7 +437,9 @@ void loop()
       PowerSensorDisplay();
     }
 
-    redisInterface_flag = true;
+    if (mTimeSeconds % redisPeriod == 0) {
+      redisInterface_flag = true;
+    }
   }
   cse7766.handle();// CSE7766 handle
   clickbutton_action();
@@ -801,9 +823,11 @@ void redisInterface_handle(void) {
 #endif
         redisInterface_state = 0;
         redisInterface_flag = false;
+        redisPeriod = REDIS_PERIOD_FAIL;
         blue_led.setPatternSingle(error_pattern, 6);
         return;
       }
+      redisPeriod = REDIS_PERIOD_NORM;
       redisInterface_state++;
     } else if (redisInterface_state == 1) {
       Redis redis(redisConn);
@@ -1064,12 +1088,22 @@ unsigned int EEPROM_ReadUInt(char address)
 {
   return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
 }
-float calculateDistance(int rssi) {
-  if (rssi == 0) {
-    return -1.0;
-  }
-
-  float pl = (rssi + 2.031862) / (-3.9955);
-  float distance =  pow( 10, pl);
-  return distance;
+#if USE_WiFiManager
+void configModeCallback (WiFiManager *myWiFiManager) {
+  //entered config mode, make led toggle faster
+  ticker.attach(1, tick);
 }
+void tick()
+{
+  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+}
+#endif
+//float calculateDistance(int rssi) {
+//  if (rssi == 0) {
+//    return -1.0;
+//  }
+//
+//  float pl = (rssi + 2.031862) / (-3.9955);
+//  float distance =  pow( 10, pl);
+//  return distance;
+//}

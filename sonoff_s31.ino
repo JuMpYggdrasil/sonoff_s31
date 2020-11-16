@@ -172,7 +172,7 @@ int normal_pattern[] = {1500, 100, 300, 100};
 int error_pattern[] = {1100, 100, 300, 100, 300, 100};
 int noAuthen_pattern[] = {700, 100, 300, 100, 300, 100, 300, 100};
 int unauthen_pattern[] = {300, 100, 300, 100, 300, 900};
-int waitReset_pattern[] = {100, 100,100, 200};
+int waitReset_pattern[] = {100, 100, 100, 200};
 
 //prototype declare
 void startupConfig(void);
@@ -239,7 +239,7 @@ void setup() {
 
   unsigned long exitTime = millis() + 6000;
   while (millis() < exitTime) {
-    if (S31_Button.isSingleClick()) {
+    if (S31_Button.isClick()) {
       //restore to default
       EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
       EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
@@ -279,7 +279,7 @@ void setup() {
     ESP.reset();
     delay(1000);
   }
-  ticker.detach();  
+  ticker.detach();
 #else
   WiFi.begin(ssid, password);
   // Wait for connection
@@ -289,7 +289,7 @@ void setup() {
   }
 #endif
 
-  
+
 
   // Register host name in WiFi and mDNS
   hostNameWifi = HOST_NAME;

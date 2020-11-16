@@ -237,7 +237,7 @@ void setup() {
 
   blue_led.setPatternSingle(waitReset_pattern, 4);
 
-  unsigned long exitTime = millis() + 6000;
+  unsigned long exitTime = millis() + 8000;
   while (millis() < exitTime) {
     if (S31_Button.isClick()) {
       //restore to default

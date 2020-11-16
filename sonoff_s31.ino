@@ -271,13 +271,18 @@ void setup() {
   //sets timeout for which to attempt connecting, useful if you get a lot of failed connects
   //wm.setConnectTimeout(20);     // how long to try to connect for before continuing
 
+  if (wm_reset_flag) {
+    wm.resetSettings();
+  }
+
   wm.setAPCallback(configModeCallback);
   wm.setConfigPortalTimeout(300);
   wm.setDebugOutput(false);
   bool res = wm.autoConnect();    // password protected ap
   if (!res) {
+    delay(3000);
     ESP.reset();
-    delay(1000);
+    delay(5000);
   }
   ticker.detach();
 #else

@@ -204,895 +204,895 @@ const char WEB_SCRIPT_START[] PROGMEM = "</div></body><script>";//with end conte
 const char WEB_SCRIPT_HTML_END[] PROGMEM = "</script></html>";
 
 void setup() {
-  // Initialize
-  ESP.wdtDisable();
+    // Initialize
+    ESP.wdtDisable();
 
-  cse7766.setRX(1);
-  cse7766.begin();// will initialize serial to 4800 bps
+    cse7766.setRX(1);
+    cse7766.begin();// will initialize serial to 4800 bps
 
-  //  pinMode(PUSHBUTTON_PIN, INPUT);
-  //  pinMode(LED_PIN, OUTPUT);
-  //  digitalWrite(LED_PIN, LOW);
-  blue_led.setOffSingle();//turn on blue led
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW);//turn off red led
+    //  pinMode(PUSHBUTTON_PIN, INPUT);
+    //  pinMode(LED_PIN, OUTPUT);
+    //  digitalWrite(LED_PIN, LOW);
+    blue_led.setOffSingle();//turn on blue led
+    pinMode(RELAY_PIN, OUTPUT);
+    digitalWrite(RELAY_PIN, LOW);//turn off red led
 
-  redis_deviceKey.reserve(80);
-  redis_server_addr.reserve(30);
-  redis_server_pass.reserve(19);
+    redis_deviceKey.reserve(80);
+    redis_server_addr.reserve(30);
+    redis_server_pass.reserve(19);
 
-  EEPROM.begin(512);
+    EEPROM.begin(512);
 
-  if (EEPROM.read(EEPROM_INIT) != 1) {
-    EEPROM.write(EEPROM_INIT, 1);
-    delay(1);
-    EEPROM.commit();
-    delay(1);
+    if (EEPROM.read(EEPROM_INIT) != 1) {
+        EEPROM.write(EEPROM_INIT, 1);
+        delay(1);
+        EEPROM.commit();
+        delay(1);
 
-    EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
-    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
-    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, REDIS_PORT);
-    EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
-  }
+        EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
+        EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
+        EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, REDIS_PORT);
+        EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
+    }
 
-  blue_led.setPatternSingle(waitReset_pattern, 4);
+    blue_led.setPatternSingle(waitReset_pattern, 4);
 
-  unsigned long exitTime = millis() + 8000;
-  while (millis() < exitTime) {
-    if (S31_Button.isClick()) {
-      //restore to default
-      EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
-      EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
-      EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, REDIS_PORT);
-      EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
+    unsigned long exitTime = millis() + 8000;
+    while (millis() < exitTime) {
+        if (S31_Button.isClick()) {
+            //restore to default
+            EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
+            EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
+            EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, REDIS_PORT);
+            EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
 
-      redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
-      redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
-      redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
-      redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
+            redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
+            redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+            redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+            redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
 
 #if USE_WiFiManager
-      wm_reset_flag = true;
+            wm_reset_flag = true;
 #endif
+        }
+        S31_Button.update();
+        blue_led.update();
     }
-    S31_Button.update();
-    blue_led.update();
-  }
-  blue_led.setOffSingle();//turn on blue led
+    blue_led.setOffSingle();//turn on blue led
 
 #if !USE_MDNS
-  WiFi.config(local_IP, primaryDNS, gateway, subnet);
+    WiFi.config(local_IP, primaryDNS, gateway, subnet);
 #endif
 
-  // WiFi connection
-  WiFi.mode(WIFI_STA);
+    // WiFi connection
+    WiFi.mode(WIFI_STA);
 
 #if USE_WiFiManager
-  //sets timeout for which to attempt connecting, useful if you get a lot of failed connects
-  //wm.setConnectTimeout(20);     // how long to try to connect for before continuing
+    //sets timeout for which to attempt connecting, useful if you get a lot of failed connects
+    //wm.setConnectTimeout(20);     // how long to try to connect for before continuing
 
-  if (wm_reset_flag) {
-    wm.resetSettings();
-  }
+    if (wm_reset_flag) {
+        wm.resetSettings();
+    }
 
-  wm.setAPCallback(configModeCallback);
-  wm.setConfigPortalTimeout(300);
-  wm.setDebugOutput(false);
-  bool res = wm.autoConnect();    // password protected ap
-  if (!res) {
-    delay(3000);
-    ESP.reset();
-    delay(5000);
-  }
-  ticker.detach();
+    wm.setAPCallback(configModeCallback);
+    wm.setConfigPortalTimeout(300);
+    wm.setDebugOutput(false);
+    bool res = wm.autoConnect();    // password protected ap
+    if (!res) {
+        delay(3000);
+        ESP.reset();
+        delay(5000);
+    }
+    ticker.detach();
 #else
-  WiFi.begin(ssid, password);
-  // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    yield();
-  }
+    WiFi.begin(ssid, password);
+    // Wait for connection
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        yield();
+    }
 #endif
 
 
 
-  // Register host name in WiFi and mDNS
-  hostNameWifi = HOST_NAME;
-  hostNameWifi.concat(".local");
+    // Register host name in WiFi and mDNS
+    hostNameWifi = HOST_NAME;
+    hostNameWifi.concat(".local");
 
 #ifdef ESP8266 // Only for it
-  WiFi.hostname(hostNameWifi);
+    WiFi.hostname(hostNameWifi);
 #endif
 
 #if USE_MDNS
-  if (MDNS.begin(HOST_NAME)) {
-    //Serial.print("* MDNS responder started. Hostname -> ");
-    //Serial.println(HOST_NAME);
-  }
-  MDNS.addService("telnet", "tcp", 23);
-  MDNS.addService("http", "tcp", 80);
+    if (MDNS.begin(HOST_NAME)) {
+        //Serial.print("* MDNS responder started. Hostname -> ");
+        //Serial.println(HOST_NAME);
+    }
+    MDNS.addService("telnet", "tcp", 23);
+    MDNS.addService("http", "tcp", 80);
 #endif
 
-  ////==== webpage assign section ====
-  ///===== -client web access  =======
-  server.on("/", HTTP_GET, handleRoot);
-  server.on("/info", HTTP_GET, handleInfo);
-  server.on("/graph", HTTP_GET, handleGraph);
-  server.onNotFound(handleNotFound);
-  ///===== -spiffs file support  =====
-  server.serveStatic("/style.css", SPIFFS, "/style.css");
-  server.serveStatic("/log.txt", SPIFFS, "/log.txt");
-  server.serveStatic("/test.html", SPIFFS, "/test.html");
-  server.serveStatic("/highcharts.js", SPIFFS, "/highcharts.js");
-  ///===== -http post  ===============
-  server.on("/config", HTTP_POST, handleConfig);
-  server.on("/on", HTTP_POST, []() {
-    digitalWrite(RELAY_PIN, HIGH);
-    server.send(204);
-  });
-  server.on("/off", HTTP_POST, []() {
-    digitalWrite(RELAY_PIN, LOW);
-    server.send(204);
-  });
-  ///===== -ajax xmlHttpRequest  ===============
-  server.on("/xVal", HTTP_GET, []() {//using AJAX
-    String xValue = "";
-    if (digitalRead(RELAY_PIN)) {
-      xValue.concat("on");
-    } else {
-      xValue.concat("off");
-    }
-    xValue.concat("," + String(cse7766.getVoltage()));
-    xValue.concat("," + String(cse7766.getCurrent()));
-    xValue.concat("," + String(cse7766.getActivePower()));
-    xValue.concat("," + String(cse7766.getApparentPower()));
-    xValue.concat("," + String(cse7766.getReactivePower()));
-    xValue.concat("," + String(cse7766.getPowerFactor()));
-    xValue.concat("," + String(cse7766.getEnergy()));
-    xValue.concat("," + WiFi.SSID() + " " + String(WiFi.RSSI()));
+    ////==== webpage assign section ====
+    ///===== -client web access  =======
+    server.on("/", HTTP_GET, handleRoot);
+    server.on("/info", HTTP_GET, handleInfo);
+    server.on("/graph", HTTP_GET, handleGraph);
+    server.onNotFound(handleNotFound);
+    ///===== -spiffs file support  =====
+    server.serveStatic("/style.css", SPIFFS, "/style.css");
+    server.serveStatic("/log.txt", SPIFFS, "/log.txt");
+    server.serveStatic("/test.html", SPIFFS, "/test.html");
+    server.serveStatic("/highcharts.js", SPIFFS, "/highcharts.js");
+    ///===== -http post  ===============
+    server.on("/config", HTTP_POST, handleConfig);
+    server.on("/on", HTTP_POST, []() {
+        digitalWrite(RELAY_PIN, HIGH);
+        server.send(204);
+    });
+    server.on("/off", HTTP_POST, []() {
+        digitalWrite(RELAY_PIN, LOW);
+        server.send(204);
+    });
+    ///===== -ajax xmlHttpRequest  ===============
+    server.on("/xVal", HTTP_GET, []() {//using AJAX
+        String xValue = "";
+        if (digitalRead(RELAY_PIN)) {
+            xValue.concat("on");
+        } else {
+            xValue.concat("off");
+        }
+        xValue.concat("," + String(cse7766.getVoltage()));
+        xValue.concat("," + String(cse7766.getCurrent()));
+        xValue.concat("," + String(cse7766.getActivePower()));
+        xValue.concat("," + String(cse7766.getApparentPower()));
+        xValue.concat("," + String(cse7766.getReactivePower()));
+        xValue.concat("," + String(cse7766.getPowerFactor()));
+        xValue.concat("," + String(cse7766.getEnergy()));
+        xValue.concat("," + WiFi.SSID() + " " + String(WiFi.RSSI()));
 
-    int n = WiFi.scanNetworks();
-    String ssni = ",";
-    for (int i = 0; i < n; i++)
-    {
-      if (WiFi.SSID(i).startsWith("ESP")) {
-        ssni.concat(WiFi.SSID(i) + " " + String(WiFi.RSSI(i)) + "  ");
-        //ssni.concat(WiFi.SSID(i) + " " + String(calculateDistance(WiFi.RSSI(i))) + "  ");
-      }
-      if (WiFi.SSID(i) == "JUMP") {
-        ssni.concat(WiFi.SSID(i) + " " + String(WiFi.RSSI(i)) + "  ");
-        //ssni.concat(WiFi.SSID(i) + " " + String(calculateDistance(WiFi.RSSI(i))) + "  ");
-      }
-    }
-    xValue.concat(ssni);
-    server.send(200, "text/plain", xValue);//(comma format)
-  });
+        int n = WiFi.scanNetworks();
+        String ssni = ",";
+        for (int i = 0; i < n; i++)
+        {
+            if (WiFi.SSID(i).startsWith("ESP")) {
+                ssni.concat(WiFi.SSID(i) + " " + String(WiFi.RSSI(i)) + "  ");
+                //ssni.concat(WiFi.SSID(i) + " " + String(calculateDistance(WiFi.RSSI(i))) + "  ");
+            }
+            if (WiFi.SSID(i) == "JUMP") {
+                ssni.concat(WiFi.SSID(i) + " " + String(WiFi.RSSI(i)) + "  ");
+                //ssni.concat(WiFi.SSID(i) + " " + String(calculateDistance(WiFi.RSSI(i))) + "  ");
+            }
+        }
+        xValue.concat(ssni);
+        server.send(200, "text/plain", xValue);//(comma format)
+    });
 
 #if USE_OTA
-  ElegantOTA.begin(&server);    // Start ElegantOTA
+    ElegantOTA.begin(&server);    // Start ElegantOTA
 #endif
 
-  server.begin();
-  timeClient.begin();
+    server.begin();
+    timeClient.begin();
 
-  bool spiffsResult = SPIFFS.begin();
-  if (spiffsResult) {
+    bool spiffsResult = SPIFFS.begin();
+    if (spiffsResult) {
 #if USE_FTP
-    /////FTP Setup, ensure SPIFFS is started before ftp;  /////////
-    ftpSrv.begin(ftp_user, ftp_password);// Then start FTP server when WiFi connection in On
+        /////FTP Setup, ensure SPIFFS is started before ftp;  /////////
+        ftpSrv.begin(ftp_user, ftp_password);// Then start FTP server when WiFi connection in On
 #endif
 
-    //startupConfig();
-    startupLog();
-  }
-
-#if USE_TELNET
-  //// Initialize RemoteDebug
-  Debug.begin(HOST_NAME); // Initialize the WiFi server
-  Debug.setResetCmdEnabled(true); // Enable the reset command
-  Debug.showProfiler(true); // Profiler (Good to measure times, to optimize codes)
-  Debug.showColors(true); // Colors
-
-  /// Debug levels
-  debugA("* This is a message of debug level ANY");//always show
-  debugV("* This is a message of debug level VERBOSE");
-  debugD("* This is a message of debug level DEBUG");
-  debugI("* This is a message of debug level INFO");
-  debugW("* This is a message of debug level WARNING");
-  debugE("* This is a message of debug level ERROR");
-#endif
-
-  redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
-  redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
-  redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
-  redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
-
-#if USE_TELNET
-  debugI("IP address: %s", WiFi.localIP().toString().c_str());
-  debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
-  debugI("redis_server_addr: %s", redis_server_addr.c_str());
-  debugI("redis_server_port: %d", redis_server_port);
-  debugI("redis_server_pass: %s", redis_server_pass.c_str());
-#endif
-
-  blue_led.setOnSingle();//turn off blue led
-  digitalWrite(RELAY_PIN, HIGH);//turn on red led
-
-  blue_led.setPatternSingle(init_pattern, 2);
-  ESP.wdtEnable(WDTO_8S);
-}
-
-void loop()
-{
-  // Each second
-  if ((millis() - mLastTime) >= 1000) {
-    // Time
-    mLastTime = millis();
-    mTimeSeconds++;
-
-    if (mTimeSeconds % 5 == 0) { // Each 5 seconds
-      PowerSensorDisplay();
+        //startupConfig();
+        startupLog();
     }
 
-    if (mTimeSeconds % redisPeriod == 0) {
-      redisInterface_flag = true;
-    }
-  }
-  cse7766.handle();// CSE7766 handle
-  clickbutton_action();
-  S31_Button.update();
-  blue_led.update();
-  server.handleClient();
-  timeClient.update();
-  redisInterface_handle();
-
-#if USE_MDNS
-  MDNS.update();
-#endif
-
-#if USE_FTP
-  ftpSrv.handleFTP();
-#endif
-
 #if USE_TELNET
-  Debug.handle();// RemoteDebug handle
+    //// Initialize RemoteDebug
+    Debug.begin(HOST_NAME); // Initialize the WiFi server
+    Debug.setResetCmdEnabled(true); // Enable the reset command
+    Debug.showProfiler(true); // Profiler (Good to measure times, to optimize codes)
+    Debug.showColors(true); // Colors
+
+    /// Debug levels
+    debugA("* This is a message of debug level ANY");//always show
+    debugV("* This is a message of debug level VERBOSE");
+    debugD("* This is a message of debug level DEBUG");
+    debugI("* This is a message of debug level INFO");
+    debugW("* This is a message of debug level WARNING");
+    debugE("* This is a message of debug level ERROR");
 #endif
-
-  ESP.wdtFeed();
-
-  // Give a time for ESP
-  yield();
-}
-
-void handleRoot(void) {
-  String rootPage = "";
-  //authentication
-  if (!server.authenticate(www_username, www_password)) {
-    return server.requestAuthentication();
-  }
-
-  redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
-  redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
-  redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
-  redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
-
-  rootPage.concat(FPSTR(WEB_HEAD));
-  rootPage.concat(FPSTR(WEB_STYLE));
-  rootPage.concat(FPSTR(WEB_BODY_START));
-  rootPage.concat(FPSTR(WEB_SIDENAV));
-  rootPage.concat(FPSTR(WEB_CONTENT_START));
-
-  rootPage.concat("<div>" + hostNameWifi + " : " + WiFi.localIP().toString() + "</div><br>");
-  rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
-  rootPage.concat(F("<label for=\"name1\">Device key:  </label><br>"));
-  rootPage.concat("<input type=\"text\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"><br>");
-  rootPage.concat(F("<label for=\"name2\">Redis addr:  </label><br>"));
-  rootPage.concat("<input type=\"text\" name=\"name2\" placeholder=\"" + redis_server_addr + "\"><br>");
-  rootPage.concat(F("<label for=\"name3\">Redis port:  </label><br>"));
-  rootPage.concat("<input type=\"text\" name=\"name3\" placeholder=\"" + String(redis_server_port) + "\"><br>");
-  rootPage.concat(F("<label for=\"name4\">Redis pass:  </label><br>"));
-  rootPage.concat("<input type=\"password\" name=\"name4\" placeholder=\"" + redis_server_pass + "\"><br>");
-  rootPage.concat(F("<input type=\"submit\" value=\"Save\">"));
-  rootPage.concat(F("</form></br>"));
-  rootPage.concat(F("<form action=\"/on\" method=\"POST\">"));
-  rootPage.concat(F("<input type=\"submit\" value=\"relay on\">"));
-  rootPage.concat(F("</form>"));
-  rootPage.concat(F("<form action=\"/off\" method=\"POST\">"));
-  rootPage.concat(F("<input type=\"submit\" value=\"relay off\">"));
-  rootPage.concat(F("</form>"));
-  rootPage.concat(F("<div id='x0Val'></div>"));
-  rootPage.concat(F("<div id='x1Val'></div>"));
-  rootPage.concat(FPSTR(WEB_SCRIPT_START));
-  rootPage.concat("setInterval(function xmlDataRequest(){");
-  rootPage.concat("var xhttp = new XMLHttpRequest();");
-  rootPage.concat("xhttp.onreadystatechange = function() {");
-  rootPage.concat("if (this.readyState == 4 && this.status == 200) {");
-  rootPage.concat("var resultText = this.responseText.split(',');");
-  rootPage.concat("document.getElementById('x0Val').innerHTML = resultText[8];");
-  rootPage.concat("document.getElementById('x1Val').innerHTML = resultText[9];}");
-  rootPage.concat("};");//function()
-  rootPage.concat("xhttp.open('GET', '/xVal', true);");
-  rootPage.concat("xhttp.send();");
-  rootPage.concat("}, 2000 ) ; ");
-  rootPage.concat(FPSTR(WEB_SCRIPT_HTML_END));
-  //rootPage.concat(FPSTR(WEB_BODY_HTML_END));
-
-  // Root web page
-  server.send(200, "text / html", rootPage);
-}
-void handleNotFound() {
-  server.send(404, "text / plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
-}
-void handleInfo(void) {
-  String infoPage = "";
-  //authentication
-  if (!server.authenticate(www_username, www_password)) {
-    return server.requestAuthentication();
-  }
-
-  infoPage.concat(FPSTR(WEB_HEAD));
-  infoPage.concat(FPSTR(WEB_STYLE));
-  infoPage.concat(FPSTR(WEB_BODY_START));
-  infoPage.concat(FPSTR(WEB_SIDENAV));
-  infoPage.concat(FPSTR(WEB_CONTENT_START));
-
-  infoPage.concat(F("<div style=\"font-weight:bold\">Network</div>"));
-  infoPage.concat("<div>IP: " + WiFi.localIP().toString() + "</div>");
-  infoPage.concat("<div>SSID: " + WiFi.SSID() + "</div>");
-  infoPage.concat("<div>RSSI: " + String(WiFi.RSSI()) + "</div>");
-
-  infoPage.concat(F("<br><div style=\"font-weight:bold\">Hardware</div>"));
-  infoPage.concat(F("<div>Relay Status: <span id='x0Val'></span></div>"));
-  infoPage.concat(F("<div>Voltage: <span id='x1Val'></span></div>"));
-  infoPage.concat(F("<div>Current: <span id='x2Val'></span></div>"));
-  infoPage.concat(F("<div>ActivePower: <span id='x3Val'></span></div>"));
-  infoPage.concat(F("<div>ApparentPower: <span id='x4Val'></span></div>"));
-  infoPage.concat(F("<div>ReactivePower: <span id='x5Val'></span></div>"));
-  infoPage.concat(F("<div>PowerFactor: <span id='x6Val'></span></div>"));
-  infoPage.concat(F("<div>Energy: <span id='x7Val'></span></div>"));
-
-  FSInfo fs_info;
-  SPIFFS.info(fs_info);
-
-  infoPage.concat(F("<br><div style=\"font-weight:bold\">Filesystem information</div>"));
-  infoPage.concat("<div>totalBytes " + String(fs_info.totalBytes) + "</div>");
-  infoPage.concat("<div>usedBytes " + String(fs_info.usedBytes) + "</div>");
-
-  Dir dir = SPIFFS.openDir ("");
-  while (dir.next ()) {
-    infoPage.concat("<div>" + String(dir.fileName ()) + "," + dir.fileSize () + "</div>");
-  }
-
-  infoPage.concat(FPSTR(WEB_SCRIPT_START));
-  infoPage.concat("setInterval(function xmlDataRequest(){");
-  infoPage.concat("var xhttp = new XMLHttpRequest();");
-  infoPage.concat("xhttp.onreadystatechange = function() {");
-  infoPage.concat("if (this.readyState == 4 && this.status == 200) {");
-  infoPage.concat("var resultText = this.responseText.split(',');");
-  infoPage.concat("document.getElementById('x0Val').innerHTML = resultText[0];");
-  infoPage.concat("document.getElementById('x1Val').innerHTML = resultText[1];");
-  infoPage.concat("document.getElementById('x2Val').innerHTML = resultText[2];");
-  infoPage.concat("document.getElementById('x3Val').innerHTML = resultText[3];");
-  infoPage.concat("document.getElementById('x4Val').innerHTML = resultText[4];");
-  infoPage.concat("document.getElementById('x5Val').innerHTML = resultText[5];");
-  infoPage.concat("document.getElementById('x6Val').innerHTML = resultText[6];");
-  infoPage.concat("document.getElementById('x7Val').innerHTML = resultText[7];}");
-  infoPage.concat("};");//function()
-  infoPage.concat("xhttp.open('GET', '/xVal', true);");
-  infoPage.concat("xhttp.send();");
-  infoPage.concat("}, 2000 ) ; ");
-  infoPage.concat(FPSTR(WEB_SCRIPT_HTML_END));
-  //infoPage.concat(FPSTR(WEB_BODY_HTML_END));
-  // Info web page
-  server.send(200, "text/html", infoPage);
-}
-
-void handleConfig(void) {
-  String configPage = "";
-
-  configPage.concat(FPSTR(WEB_HEAD));
-  configPage.concat(FPSTR(WEB_STYLE));
-  configPage.concat(FPSTR(WEB_BODY_START));
-  configPage.concat(FPSTR(WEB_SIDENAV));
-  configPage.concat(FPSTR(WEB_CONTENT_START));
-
-  configPage.concat(F("<div>config ok</div>"));
-  configPage.concat(FPSTR(WEB_BODY_HTML_END));
-  if ((server.hasArg("name1")) && (server.hasArg("name2")) && (server.hasArg("name3")) && (server.hasArg("name4"))) {
-    EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, server.arg("name1"));
-    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, server.arg("name2"));
-    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, server.arg("name3").toInt());
-    EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, server.arg("name4"));
 
     redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
     redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
     redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
     redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
-    server.send(200, "text/html", configPage);
+
 #if USE_TELNET
-    debugD("config ok");
-#endif
-  } else {
-    server.send(200, "text/plain", "config error");
-#if USE_TELNET
-    debugE("config error");
-#endif
-  }
-}
-
-void handleGraph(void) {
-  String graphPage = "";
-  //authentication
-  if (!server.authenticate(www_username, www_password)) {
-    return server.requestAuthentication();
-  }
-
-  graphPage.concat(FPSTR(WEB_HEAD));
-  graphPage.concat(FPSTR(WEB_LOAD_SCRIPT));
-  graphPage.concat(FPSTR(WEB_STYLE));
-  graphPage.concat(FPSTR(WEB_BODY_START));
-  graphPage.concat(FPSTR(WEB_SIDENAV));
-  graphPage.concat(FPSTR(WEB_CONTENT_START));
-
-  graphPage.concat(F("<div id=\"chart-temperature\" class=\"container\"></div>"));
-
-  graphPage.concat(FPSTR(WEB_SCRIPT_START));
-
-  graphPage.concat("var chartT=new Highcharts.Chart({chart:{renderTo:\"chart-temperature\"},title:{text:\"CSE7766 Power\"},series:[{showInLegend:!1,data:[]}],plotOptions:{line:{animation:!1,dataLabels:{enabled:!0}},series:{color:\"#059e8a\"}},xAxis:{type:\"datetime\",dateTimeLabelFormats:{second:\"%H:%M:%S\"}},yAxis:{title:{text:\"Power (watt)\"}},credits:{enabled:!1}});setInterval(function(){var e=new XMLHttpRequest;e.onreadystatechange=function(){if(4==this.readyState&&200==this.status){var e=this.responseText.split(\",\"),t=(new Date).getTime(),a=parseFloat(e[3]);chartT.series[0].data.length>60?chartT.series[0].addPoint([t,a],!0,!0,!0):chartT.series[0].addPoint([t,a],!0,!1,!0)}},e.open(\"GET\",\"/xVal\",!0),e.send()},1e3);");
-
-  graphPage.concat(FPSTR(WEB_SCRIPT_HTML_END));
-  //graphPage.concat(FPSTR(WEB_BODY_HTML_END));
-  // Info web page
-  server.send(200, "text/html", graphPage);
-}
-
-void clickbutton_action(void) {
-  if (S31_Button.isClick()) {
-#if USE_TELNET
-    debugD("Click");
-#endif
-  }
-  if (S31_Button.isSingleClick()) {
-#if USE_TELNET
-    debugD("SingleClick");
-    if (digitalRead(RELAY_PIN)) {
-      debugI("status on\n");
-    } else {
-      debugI("status off\n");
-    }
+    debugI("IP address: %s", WiFi.localIP().toString().c_str());
     debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
     debugI("redis_server_addr: %s", redis_server_addr.c_str());
     debugI("redis_server_port: %d", redis_server_port);
     debugI("redis_server_pass: %s", redis_server_pass.c_str());
-    //debugI("cse7766: %s", cse7766.description().c_str());
-    debugW("ssid %s", WiFi.SSID().c_str());
-
-    //WL_IDLE_STATUS: it is a temporary status assigned when WiFi.begin() is called and remains active until the number of attempts expires (resulting in WL_CONNECT_FAILED) or a connection is established (resulting in WL_CONNECTED);
-
-    if (WiFi.status() == WL_CONNECTED) {
-      debugW("connected");
-    } else if (WiFi.status() == WL_NO_SHIELD) {
-      debugW("no WiFi shield is present");
-    } else if (WiFi.status() == WL_IDLE_STATUS) {
-      debugW("idle");
-    } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
-      debugW("no SSID are available");
-    } else if (WiFi.status() == WL_SCAN_COMPLETED) {
-      debugW("scan networks is completed");
-    } else if (WiFi.status() == WL_CONNECT_FAILED) {
-      debugW("connection fails for all the attempts");
-    } else if (WiFi.status() == WL_CONNECTION_LOST) {
-      debugW("connection is lost");
-    } else if (WiFi.status() == WL_DISCONNECTED) {
-      debugW("disconnected from a network");
-    } else {
-      debugW("status error");
-    }
 #endif
+
+    blue_led.setOnSingle();//turn off blue led
+    digitalWrite(RELAY_PIN, HIGH);//turn on red led
+
     blue_led.setPatternSingle(init_pattern, 2);
+    ESP.wdtEnable(WDTO_8S);
+}
 
-    File configFile = SPIFFS.open("/config.txt", "r");
-    if (configFile)
-    {
-      while (configFile.available())
-      {
-        //read line by line from the file
-        String line = configFile.readStringUntil('\n');
-#if USE_TELNET
-        debugI("%s", line.c_str());
-#endif
-        //        String resultstr;
-        //        if (line.startsWith("ssid")) {
-        //          resultstr = line.substring(line.indexOf(",") + 1);
-        //          resultstr.trim();
-        //          resultstr.toCharArray(ssid, resultstr.length() + 1);
-        //          debugI("-> %s", resultstr.c_str());
-        //          debugI("--> %s", ssid);
-        //        } else if (line.startsWith("pass")) {
-        //          resultstr = line.substring(line.indexOf(",") + 1);
-        //          resultstr.trim();
-        //          resultstr.toCharArray(password, resultstr.length() + 1);
-        //          debugI("-> %s", resultstr.c_str());
-        //          debugI("--> %s", password);
-        //        } else {
-        //          debugI("%s", line.c_str());
-        //        }
-      }
+void loop()
+{
+    // Each second
+    if ((millis() - mLastTime) >= 1000) {
+        // Time
+        mLastTime = millis();
+        mTimeSeconds++;
+
+        if (mTimeSeconds % 5 == 0) { // Each 5 seconds
+            PowerSensorDisplay();
+        }
+
+        if (mTimeSeconds % redisPeriod == 0) {
+            redisInterface_flag = true;
+        }
     }
-    configFile.close();
-  }
-  if (S31_Button.isDoubleClick()) {
-    digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
-#if USE_TELNET
-    debugD("DoubleClick");
+    cse7766.handle();// CSE7766 handle
+    clickbutton_action();
+    S31_Button.update();
+    blue_led.update();
+    server.handleClient();
+    timeClient.update();
+    redisInterface_handle();
+
+#if USE_MDNS
+    MDNS.update();
 #endif
-  }
-  if (S31_Button.isLongClick()) {
-    //restore to default
-    EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
-    EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
-    EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, REDIS_PORT);
-    EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
+
+#if USE_FTP
+    ftpSrv.handleFTP();
+#endif
+
+#if USE_TELNET
+    Debug.handle();// RemoteDebug handle
+#endif
+
+    ESP.wdtFeed();
+
+    // Give a time for ESP
+    yield();
+}
+
+void handleRoot(void) {
+    String rootPage = "";
+    //authentication
+    if (!server.authenticate(www_username, www_password)) {
+        return server.requestAuthentication();
+    }
 
     redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
     redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
     redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
     redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
 
+    rootPage.concat(FPSTR(WEB_HEAD));
+    rootPage.concat(FPSTR(WEB_STYLE));
+    rootPage.concat(FPSTR(WEB_BODY_START));
+    rootPage.concat(FPSTR(WEB_SIDENAV));
+    rootPage.concat(FPSTR(WEB_CONTENT_START));
+
+    rootPage.concat("<div>" + hostNameWifi + " : " + WiFi.localIP().toString() + "</div><br>");
+    rootPage.concat(F("<form action=\"/config\" method=\"POST\">"));
+    rootPage.concat(F("<label for=\"name1\">Device key:  </label><br>"));
+    rootPage.concat("<input type=\"text\" name=\"name1\" placeholder=\"" + redis_deviceKey + "\"><br>");
+    rootPage.concat(F("<label for=\"name2\">Redis addr:  </label><br>"));
+    rootPage.concat("<input type=\"text\" name=\"name2\" placeholder=\"" + redis_server_addr + "\"><br>");
+    rootPage.concat(F("<label for=\"name3\">Redis port:  </label><br>"));
+    rootPage.concat("<input type=\"text\" name=\"name3\" placeholder=\"" + String(redis_server_port) + "\"><br>");
+    rootPage.concat(F("<label for=\"name4\">Redis pass:  </label><br>"));
+    rootPage.concat("<input type=\"password\" name=\"name4\" placeholder=\"" + redis_server_pass + "\"><br>");
+    rootPage.concat(F("<input type=\"submit\" value=\"Save\">"));
+    rootPage.concat(F("</form></br>"));
+    rootPage.concat(F("<form action=\"/on\" method=\"POST\">"));
+    rootPage.concat(F("<input type=\"submit\" value=\"relay on\">"));
+    rootPage.concat(F("</form>"));
+    rootPage.concat(F("<form action=\"/off\" method=\"POST\">"));
+    rootPage.concat(F("<input type=\"submit\" value=\"relay off\">"));
+    rootPage.concat(F("</form>"));
+    rootPage.concat(F("<div id='x0Val'></div>"));
+    rootPage.concat(F("<div id='x1Val'></div>"));
+    rootPage.concat(FPSTR(WEB_SCRIPT_START));
+    rootPage.concat("setInterval(function xmlDataRequest(){");
+    rootPage.concat("var xhttp = new XMLHttpRequest();");
+    rootPage.concat("xhttp.onreadystatechange = function() {");
+    rootPage.concat("if (this.readyState == 4 && this.status == 200) {");
+    rootPage.concat("var resultText = this.responseText.split(',');");
+    rootPage.concat("document.getElementById('x0Val').innerHTML = resultText[8];");
+    rootPage.concat("document.getElementById('x1Val').innerHTML = resultText[9];}");
+    rootPage.concat("};");//function()
+    rootPage.concat("xhttp.open('GET', '/xVal', true);");
+    rootPage.concat("xhttp.send();");
+    rootPage.concat("}, 2000 ) ; ");
+    rootPage.concat(FPSTR(WEB_SCRIPT_HTML_END));
+    //rootPage.concat(FPSTR(WEB_BODY_HTML_END));
+
+    // Root web page
+    server.send(200, "text / html", rootPage);
+}
+void handleNotFound() {
+    server.send(404, "text / plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
+}
+void handleInfo(void) {
+    String infoPage = "";
+    //authentication
+    if (!server.authenticate(www_username, www_password)) {
+        return server.requestAuthentication();
+    }
+
+    infoPage.concat(FPSTR(WEB_HEAD));
+    infoPage.concat(FPSTR(WEB_STYLE));
+    infoPage.concat(FPSTR(WEB_BODY_START));
+    infoPage.concat(FPSTR(WEB_SIDENAV));
+    infoPage.concat(FPSTR(WEB_CONTENT_START));
+
+    infoPage.concat(F("<div style=\"font-weight:bold\">Network</div>"));
+    infoPage.concat("<div>IP: " + WiFi.localIP().toString() + "</div>");
+    infoPage.concat("<div>SSID: " + WiFi.SSID() + "</div>");
+    infoPage.concat("<div>RSSI: " + String(WiFi.RSSI()) + "</div>");
+
+    infoPage.concat(F("<br><div style=\"font-weight:bold\">Hardware</div>"));
+    infoPage.concat(F("<div>Relay Status: <span id='x0Val'></span></div>"));
+    infoPage.concat(F("<div>Voltage: <span id='x1Val'></span></div>"));
+    infoPage.concat(F("<div>Current: <span id='x2Val'></span></div>"));
+    infoPage.concat(F("<div>ActivePower: <span id='x3Val'></span></div>"));
+    infoPage.concat(F("<div>ApparentPower: <span id='x4Val'></span></div>"));
+    infoPage.concat(F("<div>ReactivePower: <span id='x5Val'></span></div>"));
+    infoPage.concat(F("<div>PowerFactor: <span id='x6Val'></span></div>"));
+    infoPage.concat(F("<div>Energy: <span id='x7Val'></span></div>"));
+
+    FSInfo fs_info;
+    SPIFFS.info(fs_info);
+
+    infoPage.concat(F("<br><div style=\"font-weight:bold\">Filesystem information</div>"));
+    infoPage.concat("<div>totalBytes " + String(fs_info.totalBytes) + "</div>");
+    infoPage.concat("<div>usedBytes " + String(fs_info.usedBytes) + "</div>");
+
+    Dir dir = SPIFFS.openDir ("");
+    while (dir.next ()) {
+        infoPage.concat("<div>" + String(dir.fileName ()) + "," + dir.fileSize () + "</div>");
+    }
+
+    infoPage.concat(FPSTR(WEB_SCRIPT_START));
+    infoPage.concat("setInterval(function xmlDataRequest(){");
+    infoPage.concat("var xhttp = new XMLHttpRequest();");
+    infoPage.concat("xhttp.onreadystatechange = function() {");
+    infoPage.concat("if (this.readyState == 4 && this.status == 200) {");
+    infoPage.concat("var resultText = this.responseText.split(',');");
+    infoPage.concat("document.getElementById('x0Val').innerHTML = resultText[0];");
+    infoPage.concat("document.getElementById('x1Val').innerHTML = resultText[1];");
+    infoPage.concat("document.getElementById('x2Val').innerHTML = resultText[2];");
+    infoPage.concat("document.getElementById('x3Val').innerHTML = resultText[3];");
+    infoPage.concat("document.getElementById('x4Val').innerHTML = resultText[4];");
+    infoPage.concat("document.getElementById('x5Val').innerHTML = resultText[5];");
+    infoPage.concat("document.getElementById('x6Val').innerHTML = resultText[6];");
+    infoPage.concat("document.getElementById('x7Val').innerHTML = resultText[7];}");
+    infoPage.concat("};");//function()
+    infoPage.concat("xhttp.open('GET', '/xVal', true);");
+    infoPage.concat("xhttp.send();");
+    infoPage.concat("}, 2000 ) ; ");
+    infoPage.concat(FPSTR(WEB_SCRIPT_HTML_END));
+    //infoPage.concat(FPSTR(WEB_BODY_HTML_END));
+    // Info web page
+    server.send(200, "text/html", infoPage);
+}
+
+void handleConfig(void) {
+    String configPage = "";
+
+    configPage.concat(FPSTR(WEB_HEAD));
+    configPage.concat(FPSTR(WEB_STYLE));
+    configPage.concat(FPSTR(WEB_BODY_START));
+    configPage.concat(FPSTR(WEB_SIDENAV));
+    configPage.concat(FPSTR(WEB_CONTENT_START));
+
+    configPage.concat(F("<div>config ok</div>"));
+    configPage.concat(FPSTR(WEB_BODY_HTML_END));
+    if ((server.hasArg("name1")) && (server.hasArg("name2")) && (server.hasArg("name3")) && (server.hasArg("name4"))) {
+        EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, server.arg("name1"));
+        EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, server.arg("name2"));
+        EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, server.arg("name3").toInt());
+        EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, server.arg("name4"));
+
+        redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
+        redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+        redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+        redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
+        server.send(200, "text/html", configPage);
 #if USE_TELNET
-    debugD("LongClick");
+        debugD("config ok");
+#endif
+    } else {
+        server.send(200, "text/plain", "config error");
+#if USE_TELNET
+        debugE("config error");
+#endif
+    }
+}
+
+void handleGraph(void) {
+    String graphPage = "";
+    //authentication
+    if (!server.authenticate(www_username, www_password)) {
+        return server.requestAuthentication();
+    }
+
+    graphPage.concat(FPSTR(WEB_HEAD));
+    graphPage.concat(FPSTR(WEB_LOAD_SCRIPT));
+    graphPage.concat(FPSTR(WEB_STYLE));
+    graphPage.concat(FPSTR(WEB_BODY_START));
+    graphPage.concat(FPSTR(WEB_SIDENAV));
+    graphPage.concat(FPSTR(WEB_CONTENT_START));
+
+    graphPage.concat(F("<div id=\"chart-temperature\" class=\"container\"></div>"));
+
+    graphPage.concat(FPSTR(WEB_SCRIPT_START));
+
+    graphPage.concat("var chartT=new Highcharts.Chart({chart:{renderTo:\"chart-temperature\"},title:{text:\"CSE7766 Power\"},series:[{showInLegend:!1,data:[]}],plotOptions:{line:{animation:!1,dataLabels:{enabled:!0}},series:{color:\"#059e8a\"}},xAxis:{type:\"datetime\",dateTimeLabelFormats:{second:\"%H:%M:%S\"}},yAxis:{title:{text:\"Power (watt)\"}},credits:{enabled:!1}});setInterval(function(){var e=new XMLHttpRequest;e.onreadystatechange=function(){if(4==this.readyState&&200==this.status){var e=this.responseText.split(\",\"),t=(new Date).getTime(),a=parseFloat(e[3]);chartT.series[0].data.length>60?chartT.series[0].addPoint([t,a],!0,!0,!0):chartT.series[0].addPoint([t,a],!0,!1,!0)}},e.open(\"GET\",\"/xVal\",!0),e.send()},1e3);");
+
+    graphPage.concat(FPSTR(WEB_SCRIPT_HTML_END));
+    //graphPage.concat(FPSTR(WEB_BODY_HTML_END));
+    // Info web page
+    server.send(200, "text/html", graphPage);
+}
+
+void clickbutton_action(void) {
+    if (S31_Button.isClick()) {
+#if USE_TELNET
+        debugD("Click");
+#endif
+    }
+    if (S31_Button.isSingleClick()) {
+#if USE_TELNET
+        debugD("SingleClick");
+        if (digitalRead(RELAY_PIN)) {
+            debugI("status on\n");
+        } else {
+            debugI("status off\n");
+        }
+        debugI("redis_deviceKey: %s", redis_deviceKey.c_str());
+        debugI("redis_server_addr: %s", redis_server_addr.c_str());
+        debugI("redis_server_port: %d", redis_server_port);
+        debugI("redis_server_pass: %s", redis_server_pass.c_str());
+        //debugI("cse7766: %s", cse7766.description().c_str());
+        debugW("ssid %s", WiFi.SSID().c_str());
+
+        //WL_IDLE_STATUS: it is a temporary status assigned when WiFi.begin() is called and remains active until the number of attempts expires (resulting in WL_CONNECT_FAILED) or a connection is established (resulting in WL_CONNECTED);
+
+        if (WiFi.status() == WL_CONNECTED) {
+            debugW("connected");
+        } else if (WiFi.status() == WL_NO_SHIELD) {
+            debugW("no WiFi shield is present");
+        } else if (WiFi.status() == WL_IDLE_STATUS) {
+            debugW("idle");
+        } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
+            debugW("no SSID are available");
+        } else if (WiFi.status() == WL_SCAN_COMPLETED) {
+            debugW("scan networks is completed");
+        } else if (WiFi.status() == WL_CONNECT_FAILED) {
+            debugW("connection fails for all the attempts");
+        } else if (WiFi.status() == WL_CONNECTION_LOST) {
+            debugW("connection is lost");
+        } else if (WiFi.status() == WL_DISCONNECTED) {
+            debugW("disconnected from a network");
+        } else {
+            debugW("status error");
+        }
+#endif
+        blue_led.setPatternSingle(init_pattern, 2);
+
+        File configFile = SPIFFS.open("/config.txt", "r");
+        if (configFile)
+        {
+            while (configFile.available())
+            {
+                //read line by line from the file
+                String line = configFile.readStringUntil('\n');
+#if USE_TELNET
+                debugI("%s", line.c_str());
+#endif
+                //        String resultstr;
+                //        if (line.startsWith("ssid")) {
+                //          resultstr = line.substring(line.indexOf(",") + 1);
+                //          resultstr.trim();
+                //          resultstr.toCharArray(ssid, resultstr.length() + 1);
+                //          debugI("-> %s", resultstr.c_str());
+                //          debugI("--> %s", ssid);
+                //        } else if (line.startsWith("pass")) {
+                //          resultstr = line.substring(line.indexOf(",") + 1);
+                //          resultstr.trim();
+                //          resultstr.toCharArray(password, resultstr.length() + 1);
+                //          debugI("-> %s", resultstr.c_str());
+                //          debugI("--> %s", password);
+                //        } else {
+                //          debugI("%s", line.c_str());
+                //        }
+            }
+        }
+        configFile.close();
+    }
+    if (S31_Button.isDoubleClick()) {
+        digitalWrite(RELAY_PIN, !digitalRead(RELAY_PIN));
+#if USE_TELNET
+        debugD("DoubleClick");
+#endif
+    }
+    if (S31_Button.isLongClick()) {
+        //restore to default
+        EEPROM_WriteString(REDIS_EEPROM_ADDR_BEGIN, REDIS_DEVKEY);
+        EEPROM_WriteString(REDIS_EEPROM_SERVER_ADDR, REDIS_ADDR);
+        EEPROM_WriteUInt(REDIS_EEPROM_SERVER_PORT, REDIS_PORT);
+        EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
+
+        redis_deviceKey = EEPROM_ReadString(REDIS_EEPROM_ADDR_BEGIN);
+        redis_server_addr = EEPROM_ReadString(REDIS_EEPROM_SERVER_ADDR);
+        redis_server_port = EEPROM_ReadUInt(REDIS_EEPROM_SERVER_PORT);
+        redis_server_pass = EEPROM_ReadString(REDIS_EEPROM_SERVER_PASS);
+
+#if USE_TELNET
+        debugD("LongClick");
 #endif
 
 #if USE_WiFiManager
-    wm.resetSettings();
-    ESP.restart();
+        wm.resetSettings();
+        ESP.restart();
 #endif
-  }
+    }
 }
 void PowerSensorDisplay(void) {
 #if USE_TELNET
-  debugV("Voltage %.4f V\n", cse7766.getVoltage());
-  debugV("Current %.4f A\n", cse7766.getCurrent());
-  debugV("ActivePower %.4f W\n", cse7766.getActivePower());
-  debugV("ApparentPower %.4f VA\n", cse7766.getApparentPower());
-  debugV("ReactivePower %.4f VAR\n", cse7766.getReactivePower());
-  debugV("PowerFactor %.4f %%\n", cse7766.getPowerFactor());
-  debugV("Energy %.4f Ws\n", cse7766.getEnergy());
+    debugV("Voltage %.4f V\n", cse7766.getVoltage());
+    debugV("Current %.4f A\n", cse7766.getCurrent());
+    debugV("ActivePower %.4f W\n", cse7766.getActivePower());
+    debugV("ApparentPower %.4f VA\n", cse7766.getApparentPower());
+    debugV("ReactivePower %.4f VAR\n", cse7766.getReactivePower());
+    debugV("PowerFactor %.4f %%\n", cse7766.getPowerFactor());
+    debugV("Energy %.4f Ws\n", cse7766.getEnergy());
 #endif
 }
 void startupConfig(void) {
-  //  //timeClient.update();
-  //  timeClient.forceUpdate();
-  //
-  //  File configFile = SPIFFS.open("/config.txt", "r");
-  //  if (!configFile)
-  //  {
-  //    return;
-  //  }
-  //  while (configFile.available())
-  //  {
-  //    String line = configFile.readStringUntil('\n');
-  //    //      String resultstr;
-  //    //      if (line.startsWith("xxxx")) {
-  //    //        resultstr = line.substring(line.indexOf(",") + 1);
-  //    //        resultstr.trim();
-  //    //        resultstr.toCharArray(XXXX, resultstr.length() + 1);//global char* XXXX = "initial";
-  //    //      } else if (line.startsWith("yyyy")) {
-  //    //        resultstr = line.substring(line.indexOf(",") + 1);
-  //    //        resultstr.trim();
-  //    //        resultstr.toCharArray(YYYY, resultstr.length() + 1);//global char* YYYY = "initial";
-  //    //      }
-  //  }
-  //  configFile.close();
+    //  //timeClient.update();
+    //  timeClient.forceUpdate();
+    //
+    //  File configFile = SPIFFS.open("/config.txt", "r");
+    //  if (!configFile)
+    //  {
+    //    return;
+    //  }
+    //  while (configFile.available())
+    //  {
+    //    String line = configFile.readStringUntil('\n');
+    //    //      String resultstr;
+    //    //      if (line.startsWith("xxxx")) {
+    //    //        resultstr = line.substring(line.indexOf(",") + 1);
+    //    //        resultstr.trim();
+    //    //        resultstr.toCharArray(XXXX, resultstr.length() + 1);//global char* XXXX = "initial";
+    //    //      } else if (line.startsWith("yyyy")) {
+    //    //        resultstr = line.substring(line.indexOf(",") + 1);
+    //    //        resultstr.trim();
+    //    //        resultstr.toCharArray(YYYY, resultstr.length() + 1);//global char* YYYY = "initial";
+    //    //      }
+    //  }
+    //  configFile.close();
 }
 void startupLog(void) {
-  //timeClient.update();
-  timeClient.forceUpdate();
-  timeClient.forceUpdate();
+    //timeClient.update();
+    timeClient.forceUpdate();
+    timeClient.forceUpdate();
 
-  //a+ -> Open for reading and appending (writing at end of file).
-  //The file is created if it does not exist.
-  File logFile = SPIFFS.open("/log.txt", "a+");
-  if (!logFile) {
-    return;
-  }
-  if (logFile.size() < 2000) {
-    int bytesWritten = logFile.print(timeClient.getEpochTime());
-    bytesWritten = logFile.print(",");
-    bytesWritten = logFile.println( ESP.getResetReason());
-    //bytesWritten = logFile.println(timeClient.getFormattedTime());
+    //a+ -> Open for reading and appending (writing at end of file).
+    //The file is created if it does not exist.
+    File logFile = SPIFFS.open("/log.txt", "a+");
+    if (!logFile) {
+        return;
+    }
+    if (logFile.size() < 2000) {
+        int bytesWritten = logFile.print(timeClient.getEpochTime());
+        bytesWritten = logFile.print(",");
+        bytesWritten = logFile.println( ESP.getResetReason());
+        //bytesWritten = logFile.println(timeClient.getFormattedTime());
 
-  }
-  logFile.close();
+    }
+    logFile.close();
 }
 void redisInterface_handle(void) {
-  String redis_key;
-  String cse7766_value;
-  String redis_str_result;
-  bool redis_bool_result;
+    String redis_key;
+    String cse7766_value;
+    String redis_str_result;
+    bool redis_bool_result;
 
-  if (redisInterface_flag == true) {
-    if (redisInterface_state == 0) {//WIFI CLIENT
-      if (!redisConn.connect(redis_server_addr.c_str(), redis_server_port))
-      {
+    if (redisInterface_flag == true) {
+        if (redisInterface_state == 0) {//WIFI CLIENT
+            if (!redisConn.connect(redis_server_addr.c_str(), redis_server_port))
+            {
 #if USE_TELNET
-        debugE("Failed to connect to the Redis server!");
+                debugE("Failed to connect to the Redis server!");
 #endif
-        redisInterface_state = 0;
-        redisInterface_flag = false;
-        redisPeriod = REDIS_PERIOD_FAIL;
-        blue_led.setPatternSingle(error_pattern, 6);
-        return;
-      }
-      redisPeriod = REDIS_PERIOD_NORM;
-      redisInterface_state++;
-    } else if (redisInterface_state == 1) {
-      Redis redis(redisConn);
-      if (redis_server_pass != "") {
-        auto connRet = redis.authenticate(redis_server_pass.c_str());
+                redisInterface_state = 0;
+                redisInterface_flag = false;
+                redisPeriod = REDIS_PERIOD_FAIL;
+                blue_led.setPatternSingle(error_pattern, 6);
+                return;
+            }
+            redisPeriod = REDIS_PERIOD_NORM;
+            redisInterface_state++;
+        } else if (redisInterface_state == 1) {
+            Redis redis(redisConn);
+            if (redis_server_pass != "") {
+                auto connRet = redis.authenticate(redis_server_pass.c_str());
 
-        if (connRet == RedisSuccess)
-        {
+                if (connRet == RedisSuccess)
+                {
 #if USE_TELNET
-          debugD("Connected to the Redis server!");
+                    debugD("Connected to the Redis server!");
 #endif
-          blue_led.setPatternSingle(normal_pattern, 4);
+                    blue_led.setPatternSingle(normal_pattern, 4);
+                } else {
+#if USE_TELNET
+                    debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
+#endif
+                    redisInterface_state = 0;
+                    redisInterface_flag = false;
+                    redisConn.stop();
+                    blue_led.setPatternSingle(unauthen_pattern, 6);
+                    return;
+                }
+            } else {
+                blue_led.setPatternSingle(noAuthen_pattern, 8);
+            }
+
+            // Voltage
+            redis_key = redis_deviceKey + String(redis_voltage);
+            cse7766_value = String(cse7766.getVoltage());
+#if USE_TELNET
+            debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
+            redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
+            if (redis_bool_result) {
+                debugD("ok!");
+            } else {
+                debugE("err");
+                if (redis_server_pass == "") {//can connect but auth fail
+                    blue_led.setPatternSingle(unauthen_pattern, 6);
+                }
+            }
+#if REDIS_GET_TEST
+            redis_str_result = redis.get(redis_key.c_str());
+            debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
+#endif
+
+            // Current
+            redis_key = redis_deviceKey + String(redis_current);
+            cse7766_value = String(cse7766.getCurrent());
+#if USE_TELNET
+            debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
+            redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
+            if (redis_bool_result) {
+                debugD("ok!");
+            } else {
+                debugE("err");
+            }
+#if REDIS_GET_TEST
+            redis_str_result = redis.get(redis_key.c_str());
+            debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
+#endif
+
+            // ActivePower
+            redis_key = redis_deviceKey + String(redis_activepower);
+            cse7766_value = String(cse7766.getActivePower());
+#if USE_TELNET
+            debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
+            redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
+            if (redis_bool_result) {
+                debugD("ok!");
+            } else {
+                debugE("err");
+            }
+#if REDIS_GET_TEST
+            redis_str_result = redis.get(redis_key.c_str());
+            debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
+#endif
+
+            // ApparentPower
+            redis_key = redis_deviceKey + String(redis_apparentpower);
+            cse7766_value = String(cse7766.getApparentPower());
+#if USE_TELNET
+            debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
+            redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
+            if (redis_bool_result) {
+                debugD("ok!");
+            } else {
+                debugE("err");
+            }
+#if REDIS_GET_TEST
+            redis_str_result = redis.get(redis_key.c_str());
+            debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
+#endif
+
+            redisInterface_state++;
+        } else if (redisInterface_state == 2) {
+            Redis redis(redisConn);
+            if (redis_server_pass != "") {
+                auto connRet = redis.authenticate(redis_server_pass.c_str());
+
+                if (connRet == RedisSuccess)
+                {
+#if USE_TELNET
+                    debugD("Connected to the Redis server!");
+#endif
+                } else {
+#if USE_TELNET
+                    debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
+#endif
+                    redisInterface_state = 0;
+                    redisInterface_flag = false;
+                    redisConn.stop();
+                    return;
+                }
+            }
+
+            // ReactivePower
+            redis_key = redis_deviceKey + String(redis_reactivepower);
+            cse7766_value = String(cse7766.getReactivePower());
+#if USE_TELNET
+            debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
+            redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
+            if (redis_bool_result) {
+                debugD("ok!");
+            } else {
+                debugE("err");
+            }
+#if REDIS_GET_TEST
+            redis_str_result = redis.get(redis_key.c_str());
+            debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
+#endif
+
+            // PowerFactor
+            redis_key = redis_deviceKey + String(redis_powerfactor);
+            cse7766_value = String(cse7766.getPowerFactor());
+#if USE_TELNET
+            debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
+            redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
+            if (redis_bool_result) {
+                debugD("ok!");
+            } else {
+                debugE("err");
+            }
+#if REDIS_GET_TEST
+            redis_str_result = redis.get(redis_key.c_str());
+            debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
+#endif
+
+            // Energy
+            redis_key = redis_deviceKey + String(redis_energy);
+            cse7766_value = String(cse7766.getEnergy());
+#if USE_TELNET
+            debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
+#endif
+            redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
+#if USE_TELNET
+            if (redis_bool_result) {
+                debugD("ok!");
+            } else {
+                debugE("err");
+            }
+#if REDIS_GET_TEST
+            redis_str_result = redis.get(redis_key.c_str());
+            debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
+#endif
+
+            // TimeStamp
+            redis_key = redis_deviceKey + String(redis_timestamp);
+            String timeStamp = timeClient.getFormattedTime();
+#if USE_TELNET
+            debugD("SET %s %s: ", redis_key.c_str(), timeStamp.c_str());
+#endif
+            redis_bool_result = redis.set(redis_key.c_str(), timeStamp.c_str());
+#if USE_TELNET
+            if (redis_bool_result) {
+                debugD("ok!");
+            } else {
+                debugE("err");
+            }
+#if REDIS_GET_TEST
+            redis_str_result = redis.get(redis_key.c_str());
+            debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
+#endif
+#endif
+
+            redisInterface_state++;
+        } else if (redisInterface_state == 3) {
+            redisConn.stop();
+#if USE_TELNET
+            debugD("Connection closed!");
+#endif
+
+            redisInterface_state = 0;
+            redisInterface_flag = false;
         } else {
-#if USE_TELNET
-          debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
-#endif
-          redisInterface_state = 0;
-          redisInterface_flag = false;
-          redisConn.stop();
-          blue_led.setPatternSingle(unauthen_pattern, 6);
-          return;
+            redisInterface_state = 0;
+            redisInterface_flag = false;
         }
-      } else {
-        blue_led.setPatternSingle(noAuthen_pattern, 8);
-      }
-
-      // Voltage
-      redis_key = redis_deviceKey + String(redis_voltage);
-      cse7766_value = String(cse7766.getVoltage());
-#if USE_TELNET
-      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
-#endif
-      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
-#if USE_TELNET
-      if (redis_bool_result) {
-        debugD("ok!");
-      } else {
-        debugE("err");
-        if (redis_server_pass == "") {//can connect but auth fail
-          blue_led.setPatternSingle(unauthen_pattern, 6);
-        }
-      }
-#if REDIS_GET_TEST
-      redis_str_result = redis.get(redis_key.c_str());
-      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
-#endif
-#endif
-
-      // Current
-      redis_key = redis_deviceKey + String(redis_current);
-      cse7766_value = String(cse7766.getCurrent());
-#if USE_TELNET
-      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
-#endif
-      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
-#if USE_TELNET
-      if (redis_bool_result) {
-        debugD("ok!");
-      } else {
-        debugE("err");
-      }
-#if REDIS_GET_TEST
-      redis_str_result = redis.get(redis_key.c_str());
-      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
-#endif
-#endif
-
-      // ActivePower
-      redis_key = redis_deviceKey + String(redis_activepower);
-      cse7766_value = String(cse7766.getActivePower());
-#if USE_TELNET
-      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
-#endif
-      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
-#if USE_TELNET
-      if (redis_bool_result) {
-        debugD("ok!");
-      } else {
-        debugE("err");
-      }
-#if REDIS_GET_TEST
-      redis_str_result = redis.get(redis_key.c_str());
-      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
-#endif
-#endif
-
-      // ApparentPower
-      redis_key = redis_deviceKey + String(redis_apparentpower);
-      cse7766_value = String(cse7766.getApparentPower());
-#if USE_TELNET
-      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
-#endif
-      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
-#if USE_TELNET
-      if (redis_bool_result) {
-        debugD("ok!");
-      } else {
-        debugE("err");
-      }
-#if REDIS_GET_TEST
-      redis_str_result = redis.get(redis_key.c_str());
-      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
-#endif
-#endif
-
-      redisInterface_state++;
-    } else if (redisInterface_state == 2) {
-      Redis redis(redisConn);
-      if (redis_server_pass != "") {
-        auto connRet = redis.authenticate(redis_server_pass.c_str());
-
-        if (connRet == RedisSuccess)
-        {
-#if USE_TELNET
-          debugD("Connected to the Redis server!");
-#endif
-        } else {
-#if USE_TELNET
-          debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
-#endif
-          redisInterface_state = 0;
-          redisInterface_flag = false;
-          redisConn.stop();
-          return;
-        }
-      }
-
-      // ReactivePower
-      redis_key = redis_deviceKey + String(redis_reactivepower);
-      cse7766_value = String(cse7766.getReactivePower());
-#if USE_TELNET
-      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
-#endif
-      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
-#if USE_TELNET
-      if (redis_bool_result) {
-        debugD("ok!");
-      } else {
-        debugE("err");
-      }
-#if REDIS_GET_TEST
-      redis_str_result = redis.get(redis_key.c_str());
-      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
-#endif
-#endif
-
-      // PowerFactor
-      redis_key = redis_deviceKey + String(redis_powerfactor);
-      cse7766_value = String(cse7766.getPowerFactor());
-#if USE_TELNET
-      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
-#endif
-      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
-#if USE_TELNET
-      if (redis_bool_result) {
-        debugD("ok!");
-      } else {
-        debugE("err");
-      }
-#if REDIS_GET_TEST
-      redis_str_result = redis.get(redis_key.c_str());
-      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
-#endif
-#endif
-
-      // Energy
-      redis_key = redis_deviceKey + String(redis_energy);
-      cse7766_value = String(cse7766.getEnergy());
-#if USE_TELNET
-      debugD("SET %s %s: ", redis_key.c_str(), cse7766_value.c_str());
-#endif
-      redis_bool_result = redis.set(redis_key.c_str(), cse7766_value.c_str());
-#if USE_TELNET
-      if (redis_bool_result) {
-        debugD("ok!");
-      } else {
-        debugE("err");
-      }
-#if REDIS_GET_TEST
-      redis_str_result = redis.get(redis_key.c_str());
-      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
-#endif
-#endif
-
-      // TimeStamp
-      redis_key = redis_deviceKey + String(redis_timestamp);
-      String timeStamp = timeClient.getFormattedTime();
-#if USE_TELNET
-      debugD("SET %s %s: ", redis_key.c_str(), timeStamp.c_str());
-#endif
-      redis_bool_result = redis.set(redis_key.c_str(), timeStamp.c_str());
-#if USE_TELNET
-      if (redis_bool_result) {
-        debugD("ok!");
-      } else {
-        debugE("err");
-      }
-#if REDIS_GET_TEST
-      redis_str_result = redis.get(redis_key.c_str());
-      debugD("GET %s: %s", redis_key.c_str(), redis_str_result.c_str());
-#endif
-#endif
-
-      redisInterface_state++;
-    } else if (redisInterface_state == 3) {
-      redisConn.stop();
-#if USE_TELNET
-      debugD("Connection closed!");
-#endif
-
-      redisInterface_state = 0;
-      redisInterface_flag = false;
-    } else {
-      redisInterface_state = 0;
-      redisInterface_flag = false;
     }
-  }
 }
 
 void EEPROM_WriteString(char addr, String data)
 {
-  int _size = data.length();
-  int i;
-  for (i = 0; i < _size; i++)
-  {
-    EEPROM.write(addr + i, data[i]);
-  }
-  EEPROM.write(addr + _size, '\0'); //Add termination null character for String Data
-  delay(1);
-  EEPROM.commit();
-  delay(1);
+    int _size = data.length();
+    int i;
+    for (i = 0; i < _size; i++)
+    {
+        EEPROM.write(addr + i, data[i]);
+    }
+    EEPROM.write(addr + _size, '\0'); //Add termination null character for String Data
+    delay(1);
+    EEPROM.commit();
+    delay(1);
 }
 String EEPROM_ReadString(char addr)
 {
-  int i;
-  char data[100]; //Max 100 Bytes
-  int len = 0;
-  unsigned char k;
-  k = EEPROM.read(addr);
-  while (k != '\0' && len < 99) //Read until null character
-  {
-    k = EEPROM.read(addr + len);
-    data[len] = k;
-    len++;
-  }
-  data[len] = '\0';
-  return String(data);
+    int i;
+    char data[100]; //Max 100 Bytes
+    int len = 0;
+    unsigned char k;
+    k = EEPROM.read(addr);
+    while (k != '\0' && len < 99) //Read until null character
+    {
+        k = EEPROM.read(addr + len);
+        data[len] = k;
+        len++;
+    }
+    data[len] = '\0';
+    return String(data);
 }
 void EEPROM_WriteUInt(char address, unsigned int number)
 {
-  EEPROM.write(address, number >> 8);
-  EEPROM.write(address + 1, number & 0xFF);
-  delay(1);
-  EEPROM.commit();
-  delay(1);
+    EEPROM.write(address, number >> 8);
+    EEPROM.write(address + 1, number & 0xFF);
+    delay(1);
+    EEPROM.commit();
+    delay(1);
 }
 unsigned int EEPROM_ReadUInt(char address)
 {
-  return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
+    return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
 }
 #if USE_WiFiManager
 void configModeCallback (WiFiManager *myWiFiManager) {
-  //entered config mode, make led toggle faster
-  ticker.attach(1, tick);
+    //entered config mode, make led toggle faster
+    ticker.attach(1, tick);
 }
 void tick()
 {
-  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+    digitalWrite(LED_PIN, !digitalRead(LED_PIN));
 }
 #endif
 //float calculateDistance(int rssi) {

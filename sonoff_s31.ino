@@ -11,7 +11,7 @@
 #define REDIS_PORT 14285//6379
 #define REDIS_PASS "61850"
 #define REDIS_PERIOD_NORM 1//send every sec if connected
-#define REDIS_PERIOD_FAIL 20//try every 20 sec if fail
+#define REDIS_PERIOD_FAIL 30//try every 30 sec if fail
 
 #define REDIS_EEPROM_ADDR_BEGIN 0//address of REDIS_DEVKEY
 #define REDIS_EEPROM_SERVER_ADDR 100
@@ -48,7 +48,7 @@
 /// GPIOs
 #define PUSHBUTTON_PIN   0
 #define RELAY_PIN       12//relay(active high) include red led(active high)
-#define LED_PIN         13//blue led(active high/low???)
+#define LED_PIN         13//blue led(active high/->>low???)
 /// UART0
 //#define esp8266_TX_PIN 1//connect GPIO_CSE7766_RX PIN8(RI)
 //#define esp8266_RX_PIN 3//connect GPIO_CSE7766_TX PIN6(TI)
@@ -165,7 +165,7 @@ ESP8266WebServer server(80);
 WiFiClient redisConn;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "time.navy.mi.th", 25200);//GMT+7 =3600*7 =25200
-sllib blue_led(LED_PIN);
+sllib blueLed(LED_PIN);
 
 int init_pattern[] = {1900, 100};
 int normal_pattern[] = {1500, 100, 300, 100};
@@ -213,7 +213,7 @@ void setup() {
     //  pinMode(PUSHBUTTON_PIN, INPUT);
     //  pinMode(LED_PIN, OUTPUT);
     //  digitalWrite(LED_PIN, LOW);
-    blue_led.setOffSingle();//turn on blue led
+    blueLed.setOffSingle();//turn on blue led
     pinMode(RELAY_PIN, OUTPUT);
     digitalWrite(RELAY_PIN, LOW);//turn off red led
 
@@ -235,7 +235,7 @@ void setup() {
         EEPROM_WriteString(REDIS_EEPROM_SERVER_PASS, REDIS_PASS);
     }
 
-    blue_led.setPatternSingle(waitReset_pattern, 4);
+    blueLed.setPatternSingle(waitReset_pattern, 4);
 
     unsigned long exitTime = millis() + 8000;
     while (millis() < exitTime) {
@@ -256,9 +256,9 @@ void setup() {
 #endif
         }
         S31_Button.update();
-        blue_led.update();
+        blueLed.update();
     }
-    blue_led.setOffSingle();//turn on blue led
+    blueLed.setOffSingle();//turn on blue led
 
 #if !USE_MDNS
     WiFi.config(local_IP, primaryDNS, gateway, subnet);
@@ -415,10 +415,10 @@ void setup() {
     debugI("redis_server_pass: %s", redis_server_pass.c_str());
 #endif
 
-    blue_led.setOnSingle();//turn off blue led
+    blueLed.setOnSingle();//turn off blue led
     digitalWrite(RELAY_PIN, HIGH);//turn on red led
 
-    blue_led.setPatternSingle(init_pattern, 2);
+    blueLed.setPatternSingle(init_pattern, 2);
     ESP.wdtEnable(WDTO_8S);
 }
 
@@ -441,7 +441,7 @@ void loop()
     cse7766.handle();// CSE7766 handle
     clickbutton_action();
     S31_Button.update();
-    blue_led.update();
+    blueLed.update();
     server.handleClient();
     timeClient.update();
     redisInterface_handle();
@@ -689,7 +689,7 @@ void clickbutton_action(void) {
             debugW("status error");
         }
 #endif
-        blue_led.setPatternSingle(init_pattern, 2);
+        blueLed.setPatternSingle(init_pattern, 2);
 
         File configFile = SPIFFS.open("/config.txt", "r");
         if (configFile)
@@ -821,7 +821,7 @@ void redisInterface_handle(void) {
                 redisInterface_state = 0;
                 redisInterface_flag = false;
                 redisPeriod = REDIS_PERIOD_FAIL;
-                blue_led.setPatternSingle(error_pattern, 6);
+                blueLed.setPatternSingle(error_pattern, 6);
                 return;
             }
             redisPeriod = REDIS_PERIOD_NORM;
@@ -836,7 +836,7 @@ void redisInterface_handle(void) {
 #if USE_TELNET
                     debugD("Connected to the Redis server!");
 #endif
-                    blue_led.setPatternSingle(normal_pattern, 4);
+                    blueLed.setPatternSingle(normal_pattern, 4);
                 } else {
 #if USE_TELNET
                     debugE("Failed to authenticate to the Redis server! Errno: %d\n", (int)connRet);
@@ -844,11 +844,11 @@ void redisInterface_handle(void) {
                     redisInterface_state = 0;
                     redisInterface_flag = false;
                     redisConn.stop();
-                    blue_led.setPatternSingle(unauthen_pattern, 6);
+                    blueLed.setPatternSingle(unauthen_pattern, 6);
                     return;
                 }
             } else {
-                blue_led.setPatternSingle(noAuthen_pattern, 8);
+                blueLed.setPatternSingle(noAuthen_pattern, 8);
             }
 
             // Voltage
@@ -864,7 +864,7 @@ void redisInterface_handle(void) {
             } else {
                 debugE("err");
                 if (redis_server_pass == "") {//can connect but auth fail
-                    blue_led.setPatternSingle(unauthen_pattern, 6);
+                    blueLed.setPatternSingle(unauthen_pattern, 6);
                 }
             }
 #if REDIS_GET_TEST
